@@ -13,12 +13,20 @@ CocoroCore2は、MemOS（Memory Operating System）のMOSProductをベースと�
 
 ### 1.2 主要機能
 - **マルチモーダル対話**: テキスト+画像対応のストリーミングチャット
+- **完全自動記憶管理**: MemScheduler統合による全自動記憶保存・整理・最適化
 - **高度記憶機能**: MemOS統合によるNeo4j+SQLiteベースの永続記憶
 - **通知・監視機能**: 外部通知とデスクトップ監視の独り言生成
 - **設定統合管理**: Setting.json統合による動的設定変換
 - **ログ統合管理**: CocoroDockとの連携ログシステム
 
-### 1.3 システム要件
+### 1.3 重要な設計発見
+**MemOS MemSchedulerによる完全自動記憶管理（確証済み）**:
+- `MOSProduct.chat_with_references()`が記憶を完全自動処理
+- ユーザークエリ+アシスタント応答が自動保存
+- 手動`add()`メソッド呼び出しは不要
+- QUERY_LABEL、ANSWER_LABELの自動MemScheduler連携
+
+### 1.4 システム要件
 - **実行環境**: Windows PC（シングルユーザー）
 - **配布形態**: PyInstaller zip配布（インストーラー不使用）
 - **サービス形態**: アプリケーション実行（Windows Service不使用）
@@ -114,21 +122,32 @@ class LogManager:
 
 ## 3. API仕様
 
-### 3.1 エンドポイント一覧
+### 3.1 エンドポイント一覧（簡素化済み）
 
+#### コア機能API
+| メソッド | エンドポイント | 機能 | 記憶管理 |
+|---------|---------------|------|----------|
+| POST | `/api/chat/stream` | **メイン機能：完全自動記憶付きチャット** | ✅ 全自動 |
+
+#### システム管理API
 | メソッド | エンドポイント | 機能 | 実装ベース |
 |---------|---------------|------|------------|
 | GET | `/api/health` | ヘルスチェック | 独自実装 |
 | POST | `/api/control` | システム制御 | 独自実装 |
 | GET | `/api/mcp/tool-registration-log` | MCPツール登録ログ | 独自実装 |
+
+#### ユーザー・記憶管理API（最小限）
+| メソッド | エンドポイント | 機能 | 実装ベース |
+|---------|---------------|------|------------|
 | GET | `/api/users` | ユーザーリスト取得 | MemOS流用 |
 | POST | `/api/users` | ユーザー作成 | MemOS流用 |
 | GET | `/api/users/{user_id}` | ユーザー情報取得 | MemOS流用 |
 | GET | `/api/memory/user/{user_id}/stats` | 記憶統計取得 | MemOS流用 |
 | DELETE | `/api/memory/user/{user_id}/all` | 記憶全削除 | MemOS流用 |
-| POST | `/api/memory/add` | 記憶追加 | MemOS流用 |
-| POST | `/api/memory/search` | 記憶検索 | MemOS流用 |
-| POST | `/api/chat/stream` | ストリーミングチャット | MemOS+画像処理拡張 |
+
+#### 削除されたAPI（不要と判明）
+- ~~`POST /api/memory/add`~~ → **chat/stream が自動処理**
+- ~~`POST /api/memory/search`~~ → **chat/stream が自動処理**
 
 ### 3.2 主要API仕様
 
@@ -289,20 +308,33 @@ def generate_memos_config_from_setting(cocoro_config: CocoroAIConfig):
 
 ## 5. データフロー設計
 
-### 5.1 チャット処理フロー
+### 5.1 完全自動記憶管理付きチャット処理フロー
 
-#### 通常チャット（確証：CocoroCoreClient.cs仕様）
+#### 通常チャット（確証：product.py:728-899 + CocoroCoreClient.cs仕様）
 ```
 1. CocoroDock → POST /api/chat/stream
 2. MemOSChatRequest受信（query, user_id, context）
 3. ImageContext解析（source_type判定）
 4. 画像ありの場合：
-   a. Base64デコード・検証（max_image_size: 100MB）
+   a. Base64デコード・検証
    b. ImageAnalyzer.analyze_image()（OpenAI Vision API）
    c. 構造化分析結果生成（description, category, mood, time）
-5. MOSProduct.chat_with_references()でストリーミング生成
-6. Server-Sent Events形式で配信
+   
+5. 🔥 MOSProduct.chat_with_references()による完全自動処理：
+   a. QUERY_LABEL → MemScheduler自動送信
+   b. 記憶検索・LLM応答ストリーミング生成
+   c. ANSWER_LABEL → MemScheduler自動送信
+   d. ✅ 自動記憶保存（ユーザークエリ + アシスタント応答）
+   e. ADD_LABEL → MemScheduler自動送信（MOSCore.add()内）
+   
+6. Server-Sent Events形式でストリーミング配信
+7. 🎯 記憶管理：完全自動化（手動操作一切不要）
 ```
+
+#### ⚠️ 重要：記憶管理の完全自動化
+- **手動add()呼び出し不要**
+- **MemSchedulerが記憶最適化・整理**
+- **すべてのチャットが自動的に長期記憶に保存**
 
 #### 通知処理フロー（確証：参考コード実装済み）
 ```
@@ -323,18 +355,32 @@ def generate_memos_config_from_setting(cocoro_config: CocoroAIConfig):
 5. "○○をしているのね。××ですね。"形式独り言生成
 ```
 
-### 5.2 記憶管理フロー（確証：MemOS product.py仕様）
+### 5.2 MemScheduler完全自動記憶管理フロー（確証：product.py:728-899）
 
 ```
-チャット・追加リクエスト
+🔥 MOSProduct.chat_with_references()実行
     ↓
-MOSProduct.add()
-    ↓ 
-1. messages/memory_content/doc_pathから記憶抽出
-2. MemCube自動管理（userId基準）
-3. Neo4j（TreeTextMemory）+ SQLite（ユーザー管理）永続化
-4. 非同期記憶保存（高速レスポンス）
+1. QUERY_LABEL → MemScheduler（自動）
+2. 記憶検索・LLM処理・ストリーミング配信
+3. ANSWER_LABEL → MemScheduler（自動）
+4. ✅ MOSProduct.add()自動実行：
+   - ユーザークエリの自動記憶保存
+   - アシスタント応答の自動記憶保存
+   - タイムスタンプ自動付与
+5. ADD_LABEL → MemScheduler（自動）
+6. 🤖 MemScheduler自動処理：
+   - 記憶の最適化・整理
+   - Working/Long-term/User Memory間の自動移行
+   - アクティベーションメモリ更新
+   - 記憶統計の自動更新
+    ↓
+Neo4j（TreeTextMemory）+ SQLite（ユーザー管理）永続化
 ```
+
+#### 🎯 完全自動化の恩恵
+- **開発者**: 手動記憶管理コード不要
+- **ユーザー**: 全てのやり取りが自動で長期記憶に
+- **システム**: MemSchedulerによる最適化
 
 ### 5.3 起動初期化フロー
 
@@ -400,25 +446,29 @@ openai>=1.0.0
 
 ## 7. 実装計画
 
-### 7.1 開発優先順位
+### 7.1 開発優先順位（記憶管理自動化により大幅簡素化）
 
 #### フェーズ1: 基盤構築（高優先度）
 1. **設定管理システム** - 参考コードconfig.py流用
-2. **MOSProduct統合** - ラッパークラス実装  
+2. **MOSProduct統合** - 簡素なラッパークラス実装  
 3. **Neo4j管理** - 非同期起動・接続管理
 4. **基本APIエンドポイント** - health, control実装
 
-#### フェーズ2: コア機能（中優先度）  
-1. **画像処理システム** - 参考コードanalyzer.py流用
-2. **メッセージ生成** - 参考コードmessage_generator.py流用
-3. **ストリーミングチャット** - Server-Sent Events実装
-4. **ユーザー・記憶管理API** - MemOS product_router流用
+#### フェーズ2: メイン機能（最重要）  
+1. **画像処理統合** - 参考コードanalyzer.py流用
+2. **メッセージ生成統合** - 参考コードmessage_generator.py流用
+3. **🔥 自動記憶管理付きストリーミングチャット** - MOSProduct.chat_with_references()活用
+4. **最小限ユーザー管理API** - MemOS product_router流用
 
-#### フェーズ3: 統合機能（低優先度）
+#### フェーズ3: 補完機能（低優先度）
 1. **ログ管理システム** - CocoroDock連携
 2. **MCP機能** - 最小限実装
 3. **エラーハンドリング** - 統一化
-4. **パフォーマンス最適化** - メモリ・速度調整
+
+#### ❌ 削除された作業（不要と判明）
+- ~~手動記憶管理API実装~~ → **MOSProductが全自動処理**
+- ~~記憶最適化ロジック~~ → **MemSchedulerが全自動処理**
+- ~~記憶検索エンドポイント~~ → **chat_with_references()が内蔵**
 
 ### 7.2 技術的考慮事項
 
@@ -430,9 +480,39 @@ openai>=1.0.0
 
 #### 実装時注意点
 1. **参考コードの活用**: analyzer.py, message_generator.py, config.py等はそのまま流用可能
-2. **MemOS機能統合**: product_router.pyのエンドポイントを/apiに変更して活用
+2. **🔥 MemOS自動記憶管理の最大活用**: MOSProduct.chat_with_references()メイン使用
 3. **CocoroDock期待仕様**: CommunicationModels.csのレスポンス型に準拠（必要なら変更可）
 4. **設定変換処理**: generate_memos_config_from_setting()等確証済み処理活用
+
+#### 🎯 記憶管理自動化による開発効率向上
+- **コード量削減**: 手動記憶管理コード全削除
+- **バグリスク軽減**: MemSchedulerの枯れた実装に依存
+- **保守性向上**: シンプルなAPIエンドポイント構成
+- **機能向上**: MemOSの高度な記憶最適化を自動取得
+
+---
+
+## ⚠️ 重要な注意事項
+  **DeepWiki情報の信頼性について**:
+   - DeepWikiでは、MOSCore・MOSProduct・MemOS全般について整理されていない情報が混在する可能性があります
+   - 本報告書のDeepWiki由来の情報は「参考情報」として扱い、実際のソースコード確認が必要です
+   - 確証のある情報として扱えるのは、MemOS-DocsおよびReference/MemOS実コードのみです
+
+---
+
+## MemOSドキュメント
+ソースコード: ../Reference/MemOS
+ドキュメント: ../Reference/MemOS-Docs
+GitHub: https://github.com/MemTensor/MemOS （Deepwiki対応）
+
+---
+
+## 📋 更新履歴
+
+**v1.1 (2025/01/14)**: 
+- MemOS MemScheduler完全自動記憶管理の発見により大幅更新
+- 手動記憶管理API削除、実装計画簡素化
+- 確証済み：Reference/MemOS/src/memos/mem_os/product.py:728-899
 
 ---
 
