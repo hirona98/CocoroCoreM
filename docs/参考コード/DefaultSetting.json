@@ -1,0 +1,118 @@
+CocoroAIで使用する設定値のデフォルト
+先頭に # がついているものはCocoroCore2で使わない
+
+{
+  # "cocoroDockPort": 55600, # cocoroDockの待受ポート
+  "cocoroCorePort": 55601, # 本システムのAPI待受ポート
+  "cocoroMemoryPort": 55602, # 必要に応じて使用
+  "cocoroMemoryDBPort": 55603, # Neo4jに接続する待ち受けポート
+  "cocoroMemoryWebPort": 55606, #Neo4j自体が提供する管理用Webサイトのポート
+  # "cocoroShellPort": 55605,
+  # "notificationApiPort": 55604, # CocoroDockがユーザーから待ち受けるポート
+  # "isEnableNotificationApi": false,
+  "isEnableMcp": false,
+  # "isRestoreWindowPosition": false,
+  # "isTopmost": true,
+  # "isEscapeCursor": false,
+  # "escapePositions": [],
+  # "isInputVirtualKey": false,
+  # "virtualKeyString": "Win+Tab",
+  # "isAutoMove": false,
+  # "showMessageWindow": true,
+  # "isEnableAmbientOcclusion": false,
+  # "msaaLevel": 4,
+  # "characterShadow": 1,
+  # "characterShadowResolution": 0,
+  # "backgroundShadow": 2,
+  # "backgroundShadowResolution": 2,
+  # "windowSize": 1200,
+  # "windowPositionX": 0,
+  # "windowPositionY": 0,
+  # "screenshotSettings": {
+  #   "enabled": false,
+  #   "intervalMinutes": 10,
+  #   "captureActiveWindowOnly": true,
+  #   "idleTimeoutMinutes": 10
+  #
+  },
+  # "microphoneSettings": {
+  #   "inputThreshold": -30
+  #
+  },
+  "enable_pro_mode": false,
+  "enable_internet_retrieval": false,
+  "googleApiKey": "",
+  "googleSearchEngineId": "",
+  "internetMaxResults": 5,
+  "currentCharacterIndex": 1,
+  "characterList": [
+    {
+      # "isReadOnly": true,
+      "modelName": "つくよみちゃん", # ユーザーが識別するための名前
+      # "vrmFilePath": "",
+      "isUseLLM": true, # これが有効のときに本システムを使用する
+      "": "", # LLMのAPIキー（OpenAI）
+      "llmModel": "gpt-4o-mini", # LLMのモデル名（OpenAI）
+      "visionApiKey": "", # 画像認識に使用するLLMのAPIキー（apiKeyと同じでも可）
+      "visionModel": "gpt-4o-mini", # 画像認識に使用するLLMのモデル名（llmModelと同じでも可）
+      "localLLMBaseUrl": "", # 将来使用
+      "systemPromptFilePath": "つくよみちゃん_50e3ba63-f0f1-ecd4-5a54-3812ac2cc863.txt", # MOSProductに設定するシステムプロンプト
+      # "isUseTTS": false,
+      # "ttsEndpointURL": "http://127.0.0.1:50025",
+      # "ttsSperkerID": "18",
+      # "ttsType": "voicevox",
+      # "styleBertVits2Config": {
+      #   "endpointUrl": "http://localhost:5000",
+      #   "modelName": "amitaro",
+      #   "modelId": 0,
+      #   "speakerName": "あみたろ",
+      #   "speakerId": 0,
+      #   "style": "Neutral",
+      #   "styleWeight": 1,
+      #   "sdpRatio": 0.2,
+      #   "noise": 0.6,
+      #   "noiseW": 0.8,
+      #   "length": 1,
+      #   "language": "JP",
+      #   "autoSplit": true,
+      #   "splitInterval": 0.5,
+      #   "assistText": "",
+      #   "assistTextWeight": 0,
+      #   "referenceAudioPath": ""
+      #
+      },
+      # "aivisCloudConfig": {
+      #   "apiKey": "",
+      #   "endpointUrl": "",
+      #   "modelUuid": "a59cb814-0083-4369-8542-f51a29e72af7",
+      #   "speakerUuid": "",
+      #   "styleId": 0,
+      #   "styleName": "",
+      #   "useSSML": false,
+      #   "language": "ja",
+      #   "speakingRate": 1,
+      #   "emotionalIntensity": 1,
+      #   "tempoDynamics": 1,
+      #   "pitch": 0,
+      #   "volume": 1,
+      #   "outputFormat": "wav",
+      #   "outputBitrate": 0,
+      #   "outputSamplingRate": 16000,
+      #   "outputAudioChannels": "mono"
+      #
+      },
+      "isEnableMemory": true, # 基本的に有効
+      "userId": "tsukuyomichan", # メモリーID、メモリキューブのIDとして使用してよい
+      "embeddedApiKey": "", # 埋め込みモデルのAPIキー（OpenAI）
+      "embeddedModel": "text-embedding-3-small", # 埋め込みモデルのモデル名（OpenAI）
+      # "isUseSTT": false,
+      # "sttEngine": "amivoice",
+      # "sttWakeWord": "つくよみちゃん",
+      # "sttApiKey": "",
+      # "sttLanguage": "ja",
+      # "isConvertMToon": false,
+      # "isEnableShadowOff": true,
+      # "shadowOffMesh": "Face, U_Char_1"
+    }
+  ]
+}
