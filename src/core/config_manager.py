@@ -165,13 +165,17 @@ def find_config_file() -> str:
         # 通常のPythonスクリプトとして実行された場合
         base_dir = Path(__file__).parent.parent
 
-    # Setting.jsonのパス
-    config_path = base_dir.parent / "UserData2" / "Setting.json"
+    # Setting.jsonのパス（複数パターンを試行）
+    config_paths = [
+        base_dir.parent / "UserData2" / "Setting.json",  # CocoroCore2/../UserData2/
+        base_dir.parent.parent / "UserData2" / "Setting.json",  # CocoroAI/UserData2/
+    ]
+    
+    for config_path in config_paths:
+        if config_path.exists():
+            return str(config_path)
 
-    if config_path.exists():
-        return str(config_path)
-
-    raise ConfigurationError(f"Setting.jsonが見つかりません。パス: {config_path}")
+    raise ConfigurationError(f"Setting.jsonが見つかりません。検索パス: {[str(p) for p in config_paths]}")
 
 
 def substitute_env_variables(data: Any) -> Any:
@@ -282,13 +286,22 @@ def load_neo4j_config() -> Dict[str, Any]:
     else:
         base_dir = Path(__file__).parent.parent
 
-    userdata_dir = base_dir.parent / "UserData2"
-
+    # Setting.jsonのパス（複数パターンを試行）
+    config_paths = [
+        base_dir.parent / "UserData2" / "Setting.json",  # CocoroCore2/../UserData2/
+        base_dir.parent.parent / "UserData2" / "Setting.json",  # CocoroAI/UserData2/
+    ]
+    
+    setting_path = None
+    for path in config_paths:
+        if path.exists():
+            setting_path = path
+            break
+    
     # Setting.jsonから設定を読み込み
     try:
-        setting_path = userdata_dir / "Setting.json"
-        if not setting_path.exists():
-            raise ConfigurationError(f"Setting.jsonが見つかりません: {setting_path}")
+        if not setting_path:
+            raise ConfigurationError(f"Setting.jsonが見つかりません: {[str(p) for p in config_paths]}")
 
         with open(setting_path, "r", encoding="utf-8") as f:
             setting_data = json.load(f)
@@ -332,7 +345,7 @@ def create_mos_config_from_dict(mos_config_dict: Dict[str, Any]):
     """
     try:
         # 遅延インポートでMemOSの循環依存を回避
-        from memos.configs.mem_os import MOSConfig
+        from memos import MOSConfig
 
         # 辞書からMOSConfigオブジェクトを作成
         return MOSConfig(**mos_config_dict)

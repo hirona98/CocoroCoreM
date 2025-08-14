@@ -10,7 +10,7 @@ from typing import Dict
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
-from ..models.api_models import StandardResponse, ErrorResponse, SystemControlRequest
+from models.api_models import StandardResponse, ErrorResponse, SystemControlRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["control"])
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api", tags=["control"])
 async def get_core_app():
     """CoreAppの依存性注入（後で実装）"""
     # メインアプリケーションから取得
-    from ..main import get_app_instance
+    from main import get_app_instance
     return get_app_instance()
 
 
@@ -112,7 +112,7 @@ async def _handle_reload_config(app, parameters: Dict) -> Dict:
     try:
         if app:
             # 設定ファイルを再読み込み
-            from ..core.config_manager import CocoroAIConfig
+            from core.config_manager import CocoroAIConfig
             new_config = CocoroAIConfig.load()
             app.config = new_config
             logger.info("設定ファイルを再読み込みしました")

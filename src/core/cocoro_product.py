@@ -10,7 +10,7 @@ from typing import AsyncIterator, Dict, List, Optional
 from pathlib import Path
 
 from memos.mem_os.product import MOSProduct
-from memos.mem_cubes.general_mem_cube import GeneralMemCube
+from memos import GeneralMemCube
 
 from .config_manager import CocoroAIConfig, generate_memos_config_from_setting, get_mos_config
 
@@ -58,9 +58,11 @@ class CocoroProductWrapper:
         """非同期初期化処理"""
         try:
             # ユーザーが未登録の場合は登録
-            users = await self.mos_product.list_users()
-            if self.current_user_id not in [u["user_id"] for u in users]:
-                await self.register_current_user()
+            users = self.mos_product.list_users()
+            # usersはUserオブジェクトのリストなので属性でアクセス
+            user_ids = [u.user_id if hasattr(u, 'user_id') else str(u) for u in users]
+            if self.current_user_id not in user_ids:
+                self.register_current_user()
             
             logger.info(f"CocoroProductWrapper初期化完了: ユーザー={self.current_user_id}")
             
@@ -68,7 +70,7 @@ class CocoroProductWrapper:
             logger.error(f"CocoroProductWrapper初期化エラー: {e}")
             raise
     
-    async def register_current_user(self):
+    def register_current_user(self):
         """現在のキャラクターをユーザーとして登録"""
         try:
             current_character = self.cocoro_config.current_character
@@ -76,7 +78,7 @@ class CocoroProductWrapper:
                 raise ValueError("現在のキャラクターが設定されていません")
             
             # ユーザー登録
-            await self.mos_product.user_register(
+            self.mos_product.user_register(
                 user_id=self.current_user_id,
                 user_name=current_character.modelName,
                 config=get_mos_config(self.cocoro_config)
@@ -127,27 +129,27 @@ class CocoroProductWrapper:
             logger.error(f"チャット処理エラー: {e}")
             raise
     
-    async def get_user_list(self) -> List[Dict]:
+    def get_user_list(self) -> List[Dict]:
         """ユーザーリスト取得"""
         try:
-            return await self.mos_product.list_users()
+            return self.mos_product.list_users()
         except Exception as e:
             logger.error(f"ユーザーリスト取得エラー: {e}")
             raise
     
-    async def get_user_info(self, user_id: str) -> Dict:
+    def get_user_info(self, user_id: str) -> Dict:
         """ユーザー情報取得"""
         try:
-            return await self.mos_product.get_user_info(user_id)
+            return self.mos_product.get_user_info(user_id)
         except Exception as e:
             logger.error(f"ユーザー情報取得エラー: {e}")
             raise
     
-    async def get_memory_stats(self, user_id: str) -> Dict:
+    def get_memory_stats(self, user_id: str) -> Dict:
         """記憶統計取得"""
         try:
             # 記憶統計を取得
-            all_memories = await self.mos_product.get_all(user_id=user_id)
+            all_memories = self.mos_product.get_all(user_id=user_id)
             
             stats = {
                 "total_memories": len(all_memories),
@@ -170,11 +172,11 @@ class CocoroProductWrapper:
             logger.error(f"記憶統計取得エラー: {e}")
             raise
     
-    async def delete_all_memories(self, user_id: str) -> bool:
+    def delete_all_memories(self, user_id: str) -> bool:
         """ユーザーの全記憶削除"""
         try:
             # ユーザーのメモリキューブを取得
-            user_info = await self.mos_product.get_user_info(user_id)
+            user_info = self.mos_product.get_user_info(user_id)
             accessible_cubes = user_info.get("accessible_cubes", [])
             
             # 各キューブの記憶を削除

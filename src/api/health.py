@@ -10,7 +10,7 @@ from typing import Dict
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
-from ..models.api_models import HealthCheckResponse, ErrorResponse
+from models.api_models import HealthCheckResponse, ErrorResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["health"])
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api", tags=["health"])
 async def get_core_app():
     """CoreAppの依存性注入（後で実装）"""
     # メインアプリケーションから取得
-    from ..main import get_app_instance
+    from main import get_app_instance
     return get_app_instance()
 
 
