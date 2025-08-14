@@ -1,3 +1,12 @@
+# CocoroCore2
+.memos/
+neo4j/data/
+neo4j/logs/
+logs/
+
+# PyInstaller
+*.spec
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -205,3 +214,7 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# 除外対象外
+!neo4j/lib/
+!jre/lib/

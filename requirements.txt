@@ -1,6 +1,6 @@
 # CocoroCore2 Dependencies
 
-# MemOS統合
+# MemOS
 MemoryOS[tree-mem,mem-reader]==1.0.0
 
 # Web Framework
