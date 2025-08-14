@@ -333,6 +333,9 @@ def load_neo4j_config() -> Dict[str, Any]:
 
 def create_mos_config_from_dict(mos_config_dict: Dict[str, Any]):
     """辞書からMOSConfigオブジェクトを作成する
+    
+    MemOS公式APIConfig.create_user_config()と同じ方法を使用
+    確証: /Reference/MemOS/src/memos/api/config.py:461
 
     Args:
         mos_config_dict: MemOS設定辞書
@@ -346,9 +349,22 @@ def create_mos_config_from_dict(mos_config_dict: Dict[str, Any]):
     try:
         # 遅延インポートでMemOSの循環依存を回避
         from memos import MOSConfig
-
-        # 辞書からMOSConfigオブジェクトを作成
-        return MOSConfig(**mos_config_dict)
+        import warnings
+        import logging
+        
+        # Pydanticの cosmetic な警告を抑制（機能的には問題なし）
+        # 理由: MemOS内部のmodel_validator処理でシリアライゼーション警告が出るが
+        #       実際の動作には全く影響しない（MemOS公式でも同じ現象）
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", 
+                                  message="Pydantic serializer warnings", 
+                                  category=UserWarning)
+            warnings.filterwarnings("ignore",
+                                  message=".*PydanticSerializationUnexpectedValue.*",
+                                  category=UserWarning)
+            
+            # MemOS公式コードと同じ辞書形式でMOSConfig作成 (config.py:461参照)
+            return MOSConfig(**mos_config_dict)
 
     except ImportError as e:
         raise ConfigurationError(f"MemOSライブラリが利用できません: {e}")
