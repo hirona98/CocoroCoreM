@@ -21,31 +21,23 @@ class Neo4jManager:
     """組み込みNeo4j管理システム"""
     
     def __init__(self, config: Dict):
-        """
-        初期化
-        
-        Args:
-            config: Neo4j設定辞書
-        """
+        """初期化"""
         self.config = config
         self.logger = logger
         self.process: Optional[subprocess.Popen] = None
         self.is_running = False
-        self.startup_timeout = 120  # 2分
+        self.startup_timeout = 60  # 1分
         
         # Neo4jディレクトリのパス
         self.base_dir = Path(__file__).parent.parent.parent  # CocoroCore2ディレクトリ
         self.neo4j_dir = self.base_dir / "neo4j"
         
-        # プラットフォーム別の実行ファイルパス
-        if platform.system() == "Windows":
-            self.neo4j_executable = self.neo4j_dir / "bin" / "neo4j.bat"
-        else:
-            self.neo4j_executable = self.neo4j_dir / "bin" / "neo4j"
+        # Neo4j実行ファイル
+        self.neo4j_executable = self.neo4j_dir / "bin" / "neo4j.bat"
         
-        # 設定から接続情報を取得
-        self.uri = config.get("uri", "bolt://127.0.0.1:7687")
-        self.web_port = config.get("web_port", 7474)
+        # 接続設定
+        self.uri = config.get("uri", "bolt://127.0.0.1:55603")
+        self.web_port = config.get("web_port", 55606)
         self.embedded_enabled = config.get("embedded_enabled", True)
         
         # ポート番号を抽出
@@ -80,32 +72,28 @@ class Neo4jManager:
             
             # 環境変数設定
             env = os.environ.copy()
+            java_home = str(self.base_dir / "jre")
+            env["JAVA_HOME"] = java_home
+            env["PATH"] = str(Path(java_home) / "bin") + os.pathsep + env.get("PATH", "")
             env["NEO4J_HOME"] = str(self.neo4j_dir)
             env["NEO4J_CONF"] = str(self.neo4j_dir / "conf")
             
-            # プロセス起動
-            if platform.system() == "Windows":
-                # Windowsの場合
-                self.process = subprocess.Popen(
-                    [str(self.neo4j_executable), "console"],
-                    cwd=str(self.neo4j_dir),
-                    env=env,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
-                )
-            else:
-                # Linux/WSLの場合
-                self.process = subprocess.Popen(
-                    [str(self.neo4j_executable), "console"],
-                    cwd=str(self.neo4j_dir),
-                    env=env,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    preexec_fn=os.setsid
-                )
+            # Neo4j起動
+            if not self.neo4j_executable.exists():
+                self.logger.error(f"Neo4jスクリプトが見つかりません: {self.neo4j_executable}")
+                return False
+            
+            console_cmd = [str(self.neo4j_executable), "console"]
+            
+            self.process = subprocess.Popen(
+                console_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                cwd=str(self.neo4j_dir),
+                env=env,
+                text=False,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+            )
             
             # 起動待ち
             if await self._wait_for_startup():
@@ -130,6 +118,17 @@ class Neo4jManager:
             if self.process and self.process.poll() is not None:
                 # プロセスが終了している
                 self.logger.error(f"Neo4jプロセスが異常終了しました (終了コード: {self.process.returncode})")
+                
+                # エラー出力を取得
+                try:
+                    if self.process.stdout:
+                        output_bytes = self.process.stdout.read()
+                        if output_bytes:
+                            output_data = output_bytes.decode('utf-8', errors='replace')
+                            self.logger.error(f"Neo4j output: {output_data}")
+                except Exception as e:
+                    self.logger.error(f"Neo4jエラー出力の取得に失敗: {e}")
+                
                 return False
             
             # 接続テスト
