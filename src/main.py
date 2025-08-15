@@ -8,25 +8,39 @@ import asyncio
 import logging
 import signal
 import sys
+import os
 from pathlib import Path
 from typing import Optional
 
 # Pythonパスにsrcディレクトリを追加
 sys.path.insert(0, str(Path(__file__).parent))
 
+# MemOSのログディレクトリをCocoroCore2のlogsディレクトリに変更
+os.environ["MEMOS_BASE_PATH"] = str(Path(__file__).parent.parent)
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# ログ設定
+# ログディレクトリ作成
+log_dir = Path(__file__).parent.parent / "logs"
+log_dir.mkdir(exist_ok=True)
+
+# ルートロガーの設定
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("logs/cocoro_core2.log", encoding="utf-8")
-    ]
+        logging.FileHandler(log_dir / "cocoro_core2.log", encoding="utf-8")
+    ],
+    force=True  # 既存の設定を上書き
 )
+
+# MemOSのファイルハンドラーを削除してコンソールとCocoroCore2のログに統一
+memos_logger = logging.getLogger("memos")
+memos_logger.handlers = []  # 既存のハンドラーをクリア
+memos_logger.propagate = True  # ルートロガーに伝播させる
 
 logger = logging.getLogger(__name__)
 
@@ -56,16 +70,8 @@ class CocoroCore2App:
         """アプリケーション初期化"""
         try:
             logger.info("CocoroCore2を初期化しています...")
-            
-            # 1. ログディレクトリ作成
-            Path("logs").mkdir(exist_ok=True)
-            
-            # 2. 設定読み込み
-            logger.info("設定ファイルを読み込んでいます...")
             self.config = CocoroAIConfig.load(config_path)
             logger.info(f"設定読み込み完了: キャラクター={self.config.character_name}")
-            
-            # 3. FastAPIアプリ初期化
             self.app = FastAPI(
                 title="CocoroCore2",
                 description="MemOS統合CocoroAIバックエンド",
