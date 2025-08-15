@@ -86,19 +86,9 @@ async def _handle_shutdown_background(app):
     try:
         logger.info("バックグラウンドシャットダウン処理を開始")
         
-        # シャットダウン（依存関係順序：MemOS→Neo4j）
-        if app:
-            # 1. MOSProduct停止（Neo4jが必要なため先に停止）
-            if hasattr(app, 'cocoro_product'):
-                logger.info("CocoroProduct停止処理を開始...")
-                await app.cocoro_product.shutdown()
-                logger.info("CocoroProduct停止処理完了")
-            
-            # 2. Neo4j停止（MemOS停止後に停止）
-            if hasattr(app, 'neo4j_manager'):
-                logger.info("Neo4j停止処理を開始...")
-                await app.neo4j_manager.stop()
-                logger.info("Neo4j停止処理完了")
+        # メインのshutdown()メソッドを呼び出して完全なシャットダウンを実行
+        if app and hasattr(app, 'shutdown'):
+            await app.shutdown()
         
         logger.info("バックグラウンドシャットダウン処理完了")
         

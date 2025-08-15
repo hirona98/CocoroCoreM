@@ -21,6 +21,7 @@ os.environ["MEMOS_BASE_PATH"] = str(Path(__file__).parent.parent)
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
 # ログディレクトリ作成
 log_dir = Path(__file__).parent.parent / "logs"
@@ -97,6 +98,8 @@ class CocoroCore2App:
         self.neo4j_manager: Optional[Neo4jManager] = None
         self.cocoro_product: Optional[CocoroProductWrapper] = None
         self.server_task: Optional[asyncio.Task] = None
+        self.uvicorn_server: Optional[uvicorn.Server] = None
+        self._shutdown_event = asyncio.Event()
         
         # グローバルインスタンス設定
         global _app_instance
@@ -127,10 +130,23 @@ class CocoroCore2App:
             logger.info("CocoroCore2を初期化しています...")
             self.config = CocoroAIConfig.load(config_path)
             logger.info(f"設定読み込み完了: キャラクター={self.config.character_name}")
+            
+            # FastAPIアプリケーション作成（lifespanイベント付き）
+            @asynccontextmanager
+            async def lifespan(app: FastAPI):
+                # 起動時処理はinitialize()で実行済み
+                yield
+                # 終了時処理
+                try:
+                    await self._cleanup_resources()
+                except Exception as e:
+                    logger.error(f"リソースクリーンアップエラー: {e}")
+            
             self.app = FastAPI(
                 title="CocoroCore2",
                 description="MemOS統合CocoroAIバックエンド",
-                version="1.0.0"
+                version="1.0.0",
+                lifespan=lifespan
             )
             
             # CORS設定
@@ -201,47 +217,53 @@ class CocoroCore2App:
                 access_log=True
             )
             
-            server = uvicorn.Server(config)
-            self.server_task = asyncio.create_task(server.serve())
+            self.uvicorn_server = uvicorn.Server(config)
             
             logger.info(f"CocoroCore2サーバーが起動しました: http://localhost:{port}")
             
             # サーバー実行
-            await self.server_task
+            await self.uvicorn_server.serve()
             
         except Exception as e:
             logger.error(f"サーバー起動エラー: {e}")
             raise
+    
+    async def _cleanup_resources(self):
+        """リソースクリーンアップ処理"""
+        try:
+            logger.info("リソースクリーンアップを開始...")
+            
+            # MOSProduct停止
+            if self.cocoro_product:
+                await self.cocoro_product.shutdown()
+            
+            # Neo4j停止
+            if self.neo4j_manager:
+                await self.neo4j_manager.stop()
+            
+            logger.info("リソースクリーンアップ完了")
+            
+        except Exception as e:
+            logger.error(f"リソースクリーンアップエラー: {e}")
     
     async def shutdown(self):
         """アプリケーションシャットダウン"""
         try:
             logger.info("CocoroCore2をシャットダウンしています...")
             
-            # サーバー停止
-            if self.server_task:
-                self.server_task.cancel()
-                try:
-                    await self.server_task
-                except asyncio.CancelledError:
-                    pass
+            # シャットダウンイベントを設定
+            self._shutdown_event.set()
             
-            # MOSProduct停止
-            if self.cocoro_product:
-                self.cocoro_product.shutdown()
-            
-            # Neo4j停止
-            if self.neo4j_manager:
-                await self.neo4j_manager.stop()
+            # Uvicornサーバーのgraceful shutdown
+            if self.uvicorn_server:
+                self.uvicorn_server.should_exit = True
+                # サーバーが停止するまで少し待機
+                await asyncio.sleep(0.1)
             
             logger.info("CocoroCore2シャットダウン完了")
             
         except Exception as e:
             logger.error(f"シャットダウンエラー: {e}")
-        
-        finally:
-            # 強制終了
-            sys.exit(0)
 
 
 # グローバルインスタンス
@@ -283,10 +305,14 @@ async def main():
         logger.info("KeyboardInterrupt受信")
     except ConfigurationError as e:
         logger.error(f"設定エラー: {e}")
-        sys.exit(1)
+        if app:
+            await app.shutdown()
+        return
     except Exception as e:
         logger.error(f"予期しないエラー: {e}")
-        sys.exit(1)
+        if app:
+            await app.shutdown()
+        return
     finally:
         if app:
             await app.shutdown()
@@ -305,4 +331,3 @@ if __name__ == "__main__":
         logger.info("アプリケーションが中断されました")
     except Exception as e:
         logger.error(f"致命的エラー: {e}")
-        sys.exit(1)
