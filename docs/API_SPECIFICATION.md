@@ -39,7 +39,7 @@ GET /api/health
 **リクエスト**
 ```json
 {
-  "command": "shutdown",
+  "action": "shutdown",
   "params": {},
   "reason": "管理者による停止"
 }
