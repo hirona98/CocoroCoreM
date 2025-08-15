@@ -10,9 +10,8 @@ from pydantic import BaseModel, Field
 
 class StandardResponse(BaseModel):
     """標準成功レスポンス"""
-    success: bool = True
+    status: str = "success"
     message: str = "成功"
-    data: Optional[Dict] = None
 
 
 class ErrorResponse(BaseModel):
@@ -26,17 +25,6 @@ class ErrorResponse(BaseModel):
 class HealthCheckResponse(BaseModel):
     """ヘルスチェックレスポンス"""
     status: str = "healthy"
-    version: str = "1.0.0"
-    character: str = "つくよみちゃん"
-    memory_enabled: bool = True
-    llm_model: str = "gpt-4o-mini"
-    active_sessions: int = 1
-    mcp_status: Dict = Field(default_factory=lambda: {
-        "total_servers": 0,
-        "connected_servers": 0,
-        "total_tools": 0
-    })
-    neo4j_status: Optional[Dict] = None
 
 
 class UsersListResponse(BaseModel):
@@ -84,3 +72,5 @@ class MemOSChatRequest(BaseModel):
 class SystemControlRequest(BaseModel):
     """システム制御リクエスト"""
     action: str = Field(..., description="制御アクション")
+    params: Optional[Dict] = Field(default_factory=dict, description="パラメータ")
+    reason: Optional[str] = Field(None, description="実行理由")

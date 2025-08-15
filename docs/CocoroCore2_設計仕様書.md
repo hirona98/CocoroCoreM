@@ -145,10 +145,6 @@ class LogManager:
 | GET | `/api/memory/user/{user_id}/stats` | 記憶統計取得 | MemOS流用 |
 | DELETE | `/api/memory/user/{user_id}/all` | 記憶全削除 | MemOS流用 |
 
-#### 削除されたAPI（不要と判明）
-- ~~`POST /api/memory/add`~~ → **chat/stream が自動処理**
-- ~~`POST /api/memory/search`~~ → **chat/stream が自動処理**
-
 ### 3.2 主要API仕様
 
 #### ストリーミングチャット
@@ -173,26 +169,6 @@ data: {"type": "end"}
 
 Error:
 data: {"type": "error", "data": "エラーメッセージ"}
-```
-
-#### ヘルスチェック
-```
-GET /api/health
-
-Response:
-{
-  "status": "healthy",
-  "version": "1.0.0",
-  "character": "つくよみちゃん", 
-  "memory_enabled": true,
-  "llm_model": "gpt-4o-mini",
-  "active_sessions": 1,
-  "mcp_status": {
-    "total_servers": 0,
-    "connected_servers": 0,
-    "total_tools": 0
-  }
-}
 ```
 
 ### 3.3 レスポンス型定義
