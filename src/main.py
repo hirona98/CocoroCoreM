@@ -27,6 +27,13 @@ from contextlib import asynccontextmanager
 log_dir = Path(__file__).parent.parent / "logs"
 log_dir.mkdir(exist_ok=True)
 
+class HealthCheckFilter(logging.Filter):
+    """ヘルスチェックリクエストを除外するフィルター"""
+    def filter(self, record):
+        # /api/health へのアクセスログを除外
+        return not (hasattr(record, 'getMessage') and '/api/health' in record.getMessage())
+
+
 def setup_logging():
     """ログ設定を初期化"""
     # ログフォーマット
@@ -62,7 +69,11 @@ def setup_logging():
     
     # uvicornのログレベル設定
     logging.getLogger("uvicorn").setLevel(logging.INFO)
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    
+    # uvicorn.accessにヘルスチェックフィルターを追加
+    uvicorn_access_logger = logging.getLogger("uvicorn.access")
+    uvicorn_access_logger.setLevel(logging.INFO)
+    uvicorn_access_logger.addFilter(HealthCheckFilter())
     
     # Neo4jのログレベル設定
     logging.getLogger("neo4j").setLevel(logging.INFO)
