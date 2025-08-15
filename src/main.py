@@ -15,7 +15,7 @@ from typing import Optional
 # Pythonパスにsrcディレクトリを追加
 sys.path.insert(0, str(Path(__file__).parent))
 
-# MemOSのログディレクトリをCocoroCore2のlogsディレクトリに変更
+# MemOSの設定
 os.environ["MEMOS_BASE_PATH"] = str(Path(__file__).parent.parent)
 
 import uvicorn
@@ -26,21 +26,57 @@ from fastapi.middleware.cors import CORSMiddleware
 log_dir = Path(__file__).parent.parent / "logs"
 log_dir.mkdir(exist_ok=True)
 
-# ルートロガーの設定
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(log_dir / "cocoro_core2.log", encoding="utf-8")
-    ],
-    force=True  # 既存の設定を上書き
-)
-
-# MemOSのファイルハンドラーを削除してコンソールとCocoroCore2のログに統一
-memos_logger = logging.getLogger("memos")
-memos_logger.handlers = []  # 既存のハンドラーをクリア
-memos_logger.propagate = True  # ルートロガーに伝播させる
+def setup_logging():
+    """ログ設定を初期化"""
+    # ログフォーマット
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    
+    # ルートロガー設定
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    
+    # 既存のハンドラーをクリア
+    root_logger.handlers.clear()
+    
+    # コンソールハンドラー
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+    
+    # ファイルハンドラー
+    try:
+        from logging.handlers import RotatingFileHandler
+        file_handler = RotatingFileHandler(
+            log_dir / "cocoro_core2.log",
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=5,
+            encoding='utf-8'
+        )
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+    except Exception as e:
+        print(f"ファイルロガーの設定に失敗しました: {e}")
+    
+    # uvicornのログレベル設定
+    logging.getLogger("uvicorn").setLevel(logging.INFO)
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    
+    # Neo4jのログレベル設定
+    logging.getLogger("neo4j").setLevel(logging.INFO)
+    logging.getLogger("neo4j.io").setLevel(logging.INFO)
+    logging.getLogger("neo4j.pool").setLevel(logging.INFO)
+    logging.getLogger("neo4j.notifications").setLevel(logging.WARNING)
+    
+    # httpログレベル設定
+    logging.getLogger("httpcore.http11").setLevel(logging.INFO)
+    logging.getLogger("httpcore.connection").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.INFO)
+    
+    # MemOSのログレベル設定
+    logging.getLogger("memos.llms.openai").setLevel(logging.WARNING)
+    logging.getLogger("memos.memories.textual.tree_text_memory.retrieve.searcher").setLevel(logging.ERROR)
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +105,9 @@ class CocoroCore2App:
     async def initialize(self, config_path: Optional[str] = None):
         """アプリケーション初期化"""
         try:
+            # ログ設定を最初に実行（MemOS初期化前）
+            setup_logging()
+            
             logger.info("CocoroCore2を初期化しています...")
             self.config = CocoroAIConfig.load(config_path)
             logger.info(f"設定読み込み完了: キャラクター={self.config.character_name}")
@@ -107,6 +146,17 @@ class CocoroCore2App:
             
             # MOSProduct統合システム初期化
             logger.info("MOSProduct統合システムを初期化しています...")
+            
+            # MemOSのdictConfigを事前に無効化
+            try:
+                import memos.log
+                def disabled_dictConfig(config):
+                    pass
+                memos.log.dictConfig = disabled_dictConfig
+                logger.info("MemOSのdictConfigを無効化しました")
+            except Exception as e:
+                logger.warning(f"MemOSのdictConfig無効化に失敗: {e}")
+            
             self.cocoro_product = CocoroProductWrapper(self.config)
             await self.cocoro_product.initialize()
             logger.info("MOSProduct初期化完了")
