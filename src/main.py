@@ -100,6 +100,7 @@ class CocoroCore2App:
         self.server_task: Optional[asyncio.Task] = None
         self.uvicorn_server: Optional[uvicorn.Server] = None
         self._shutdown_event = asyncio.Event()
+        self._neo4j_task: Optional[asyncio.Task] = None
         
         # グローバルインスタンス設定
         global _app_instance
@@ -165,19 +166,47 @@ class CocoroCore2App:
             # 依存性注入のためのグローバルインスタンス更新
             self._update_router_instances()
             
-            # Neo4j管理システム初期化
-            logger.info("Neo4j管理システムを初期化しています...")
-            neo4j_config = load_neo4j_config()
-            self.neo4j_manager = Neo4jManager(neo4j_config)
+            # 並行初期化開始
+            logger.info("並行初期化を開始します")
             
-            # Neo4j起動
-            neo4j_started = await self.neo4j_manager.start()
-            if neo4j_started:
-                logger.info("Neo4j起動完了")
-            else:
-                logger.error("Neo4j起動に失敗しました。アプリケーションを終了します")
-                # 起動要件未達のため起動処理を中断
-                raise RuntimeError("Neo4jの起動に失敗しました")
+            # Neo4j起動を非同期タスクとして開始
+            async def start_neo4j():
+                """Neo4j起動タスク"""
+                logger.info("[並行] Neo4j管理システムを初期化しています...")
+                neo4j_config = load_neo4j_config()
+                self.neo4j_manager = Neo4jManager(neo4j_config)
+                
+                logger.info("[並行] Neo4j起動を開始...")
+                success = await self.neo4j_manager.start()
+                if success:
+                    logger.info("[並行] Neo4j起動完了")
+                else:
+                    logger.error("[並行] Neo4j起動に失敗しました")
+                    raise RuntimeError("Neo4jの起動に失敗しました")
+                return success
+            
+            # Neo4j起動タスクを非同期で開始
+            neo4j_task = asyncio.create_task(start_neo4j())
+            
+            # FastAPI初期化は並行して実行済み（上記で完了）
+            logger.info("FastAPI初期化完了（並行処理中）")
+            
+            # MOSProduct初期化前にNeo4j起動完了を待機
+            logger.info("Neo4j起動完了を待機中...")
+            try:
+                neo4j_started = await neo4j_task
+                if not neo4j_started:
+                    raise RuntimeError("Neo4jの起動に失敗しました")
+            except Exception as e:
+                logger.error(f"Neo4j起動エラー: {e}")
+                # タスクのクリーンアップ
+                if not neo4j_task.done():
+                    neo4j_task.cancel()
+                    try:
+                        await neo4j_task
+                    except asyncio.CancelledError:
+                        pass
+                raise
             
             # MOSProduct統合システム初期化
             logger.info("MOSProduct統合システムを初期化しています...")
