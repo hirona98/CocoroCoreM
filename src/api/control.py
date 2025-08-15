@@ -15,12 +15,17 @@ from models.api_models import StandardResponse, ErrorResponse, SystemControlRequ
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["control"])
 
+# グローバルアプリケーションインスタンス
+_app_instance = None
 
-async def get_core_app():
-    """CoreAppの依存性注入（後で実装）"""
-    # メインアプリケーションから取得
-    from main import get_app_instance
-    return get_app_instance()
+
+def get_core_app():
+    """CoreAppの依存性注入 - 遅延初期化対応"""
+    global _app_instance
+    if _app_instance is None:
+        from main import get_app_instance
+        _app_instance = get_app_instance()
+    return _app_instance
 
 
 @router.post("/control", response_model=StandardResponse)

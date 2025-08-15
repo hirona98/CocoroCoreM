@@ -102,6 +102,22 @@ class CocoroCore2App:
         global _app_instance
         _app_instance = self
     
+    def _update_router_instances(self):
+        """各ルーターのグローバルインスタンスを更新"""
+        try:
+            # control.pyのインスタンス更新
+            from api import control
+            control._app_instance = self
+            
+            # health.pyのインスタンス更新
+            from api import health
+            health._app_instance = self
+            
+            logger.info("ルーターのグローバルインスタンスを更新しました")
+            
+        except Exception as e:
+            logger.warning(f"ルーターインスタンス更新で警告: {e}")
+    
     async def initialize(self, config_path: Optional[str] = None):
         """アプリケーション初期化"""
         try:
@@ -129,6 +145,9 @@ class CocoroCore2App:
             # APIルーター追加
             self.app.include_router(health_router)
             self.app.include_router(control_router)
+            
+            # 依存性注入のためのグローバルインスタンス更新
+            self._update_router_instances()
             
             # Neo4j管理システム初期化
             logger.info("Neo4j管理システムを初期化しています...")
