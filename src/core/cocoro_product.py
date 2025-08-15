@@ -116,7 +116,8 @@ class CocoroProductWrapper:
         
         try:
             # MOSProduct.chat_with_references による完全自動処理
-            async for chunk in self.mos_product.chat_with_references(
+            # MOSProductのchat_with_referencesは通常のgeneratorを返すため、async forではなくfor文を使用
+            for chunk in self.mos_product.chat_with_references(
                 query=query,
                 user_id=user_id,
                 cube_id=cube_id,
