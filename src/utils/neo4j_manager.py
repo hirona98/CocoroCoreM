@@ -92,7 +92,7 @@ class Neo4jManager:
             # 期待する設定値
             expected_bolt = f"server.bolt.listen_address=127.0.0.1:{self.bolt_port}"
             expected_http = f"server.http.listen_address=127.0.0.1:{self.web_port}"
-            expected_http_enabled = "server.http.enabled=true"
+            expected_http_enabled = "server.http.enabled=false"
             
             # 既に正しい設定の場合は更新をスキップ
             if (expected_bolt in content and 
