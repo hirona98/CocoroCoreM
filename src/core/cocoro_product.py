@@ -206,12 +206,35 @@ class CocoroProductWrapper:
                 logger.warning(f"システムプロンプト読み込みエラー: {e}")
         return None
     
-    def shutdown(self):
-        """シャットダウン処理"""
+    async def shutdown(self):
+        """シャットダウン処理 - MemOS公式手順に従った適切なクリーンアップ（非同期）"""
         try:
-            # MOSProductのクリーンアップ
-            if hasattr(self.mos_product, 'shutdown'):
-                self.mos_product.shutdown()
+            logger.info("CocoroProductWrapperシャットダウン開始")
+            
+            # MemOS公式シャットダウン手順（非同期実行）
+            # メモリスケジューラー停止
+            if hasattr(self.mos_product, 'mem_scheduler_off'):
+                logger.info("メモリスケジューラーを停止中...")
+                # エグゼキューターで非同期実行
+                success = await asyncio.get_event_loop().run_in_executor(
+                    None, self.mos_product.mem_scheduler_off
+                )
+                if success:
+                    logger.info("メモリスケジューラー停止完了")
+                else:
+                    logger.warning("メモリスケジューラー停止に失敗")
+            
+            # メモリ再編成機能停止
+            if hasattr(self.mos_product, 'mem_reorganizer_off'):
+                logger.info("メモリ再編成機能を停止中...")
+                # エグゼキューターで非同期実行
+                await asyncio.get_event_loop().run_in_executor(
+                    None, self.mos_product.mem_reorganizer_off
+                )
+                logger.info("メモリ再編成機能停止完了")
+            
             logger.info("CocoroProductWrapperシャットダウン完了")
+            
         except Exception as e:
             logger.error(f"シャットダウンエラー: {e}")
+            # エラーが発生してもプロセス終了を阻害しない

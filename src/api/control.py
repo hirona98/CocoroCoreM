@@ -90,7 +90,7 @@ async def _handle_shutdown(app) -> Dict:
             
             # MOSProduct停止
             if hasattr(app, 'cocoro_product'):
-                app.cocoro_product.shutdown()
+                await app.cocoro_product.shutdown()
         
         return {"message": "シャットダウン処理を開始しました"}
         
