@@ -224,6 +224,7 @@ class Neo4jManager:
     async def _wait_for_startup(self) -> bool:
         """起動完了を待つ"""
         start_time = time.time()
+        attempt = 0
         
         while time.time() - start_time < self.startup_timeout:
             if self.process and self.process.poll() is not None:
@@ -233,9 +234,12 @@ class Neo4jManager:
             
             # 接続テスト
             if await self._test_connection():
+                self.logger.info(f"Neo4j接続成功 (試行回数: {attempt + 1}, 経過時間: {time.time() - start_time:.1f}秒)")
                 return True
             
-            await asyncio.sleep(2)
+            # ポーリング待機時間
+            await asyncio.sleep(0.5)
+            attempt += 1
         
         return False
     
