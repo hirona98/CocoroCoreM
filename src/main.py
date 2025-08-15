@@ -91,7 +91,7 @@ class CocoroCore2App:
             self.app.include_router(health_router)
             self.app.include_router(control_router)
             
-            # 4. Neo4j管理システム初期化
+            # Neo4j管理システム初期化
             logger.info("Neo4j管理システムを初期化しています...")
             neo4j_config = load_neo4j_config()
             self.neo4j_manager = Neo4jManager(neo4j_config)
@@ -101,9 +101,11 @@ class CocoroCore2App:
             if neo4j_started:
                 logger.info("Neo4j起動完了")
             else:
-                logger.warning("Neo4j起動に失敗しましたが、処理を続行します")
+                logger.error("Neo4j起動に失敗しました。アプリケーションを終了します")
+                # 起動要件未達のため起動処理を中断
+                raise RuntimeError("Neo4jの起動に失敗しました")
             
-            # 5. MOSProduct統合システム初期化
+            # MOSProduct統合システム初期化
             logger.info("MOSProduct統合システムを初期化しています...")
             self.cocoro_product = CocoroProductWrapper(self.config)
             await self.cocoro_product.initialize()
