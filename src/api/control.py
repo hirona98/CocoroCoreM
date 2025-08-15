@@ -4,6 +4,7 @@ CocoroCore2 システム制御API
 システム制御とステータス管理
 """
 
+import asyncio
 import logging
 from typing import Dict
 
@@ -45,8 +46,9 @@ async def system_control(request: SystemControlRequest, app=Depends(get_core_app
         logger.info(f"システム制御実行: {action}")
         
         if action == "shutdown":
-            # システムシャットダウン
-            result = await _handle_shutdown(app)
+            # システムシャットダウン（バックグラウンドで実行）
+            asyncio.create_task(_handle_shutdown_background(app))
+            result = {"message": "シャットダウン処理を開始しました"}
             
         elif action == "restart":
             # システム再起動
@@ -79,24 +81,29 @@ async def system_control(request: SystemControlRequest, app=Depends(get_core_app
         return JSONResponse(status_code=500, content=error_response.dict())
 
 
-async def _handle_shutdown(app) -> Dict:
-    """システムシャットダウン処理"""
+async def _handle_shutdown_background(app):
+    """システムシャットダウン処理（バックグラウンド実行）"""
     try:
+        logger.info("バックグラウンドシャットダウン処理を開始")
+        
         # グレースフルシャットダウン
         if app:
             # Neo4j停止
             if hasattr(app, 'neo4j_manager'):
+                logger.info("Neo4j停止処理を開始...")
                 await app.neo4j_manager.stop()
+                logger.info("Neo4j停止処理完了")
             
             # MOSProduct停止
             if hasattr(app, 'cocoro_product'):
+                logger.info("CocoroProduct停止処理を開始...")
                 await app.cocoro_product.shutdown()
+                logger.info("CocoroProduct停止処理完了")
         
-        return {"message": "シャットダウン処理を開始しました"}
+        logger.info("バックグラウンドシャットダウン処理完了")
         
     except Exception as e:
-        logger.error(f"シャットダウン処理エラー: {e}")
-        raise
+        logger.error(f"バックグラウンドシャットダウン処理エラー: {e}")
 
 
 async def _handle_restart(app) -> Dict:
