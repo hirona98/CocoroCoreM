@@ -83,7 +83,7 @@ GET /api/mcp/tool-registration-log
 
 ---
 
-### 統一チャットAPI
+### チャットAPI
 
 #### `POST /api/chat/stream`
 

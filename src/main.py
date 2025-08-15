@@ -100,6 +100,7 @@ from api.health import router as health_router
 from api.control import router as control_router
 from api.mcp import router as mcp_router
 from api.users import router as users_router
+from api.chat import router as chat_router
 
 
 class CocoroCore2App:
@@ -137,6 +138,10 @@ class CocoroCore2App:
             # users.pyのインスタンス更新
             from api import users
             users._app_instance = self
+            
+            # chat.pyのインスタンス更新
+            from api import chat
+            chat._app_instance = self
             
             logger.info("ルーターのグローバルインスタンスを更新しました")
             
@@ -185,6 +190,7 @@ class CocoroCore2App:
             self.app.include_router(control_router)
             self.app.include_router(mcp_router)
             self.app.include_router(users_router)
+            self.app.include_router(chat_router)
             
             # 依存性注入のためのグローバルインスタンス更新
             self._update_router_instances()

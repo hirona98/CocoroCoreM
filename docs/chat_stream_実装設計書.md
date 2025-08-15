@@ -6,14 +6,14 @@ CocoroCore2の`/api/chat/stream`エンドポイント実装について、Cocoro
 
 ## 🚨 重要な発見と課題
 
-### エンドポイント統一
+### エンドポイント
 
 **現状の問題**:
 - API仕様書: `/api/chat/stream` 
 - CocoroDock実装: `/api/memos/chat/stream`を呼び出している（CocoroCoreClient.cs:328）
 
 **解決策**: 
-- `/api/chat/stream`に統一
+- `/api/chat/stream`に
 - `/api/memos/chat/stream`は**廃止**
 - CocoroDockの実装を修正してエンドポイントを変更
 
@@ -32,7 +32,7 @@ CocoroCore2の`/api/chat/stream`エンドポイント実装について、Cocoro
 
 #### 1.1 基本情報
 
-**統一エンドポイント**:
+**エンドポイント**:
 - `POST /api/chat/stream` （新規実装）
 - `/api/memos/chat/stream` は**廃止**
 
@@ -42,7 +42,7 @@ CocoroCore2の`/api/chat/stream`エンドポイント実装について、Cocoro
 
 #### 1.2 リクエスト形式
 
-##### 統一API仕様 (`/api/chat/stream`)
+##### API仕様 (`/api/chat/stream`)
 
 ```json
 {
@@ -87,7 +87,7 @@ CocoroCore2の`/api/chat/stream`エンドポイント実装について、Cocoro
 - `internet_search`: インターネット検索有効化（オプション）
 - `request_id`: リクエスト識別ID（オプション）
 
-**注意**: 従来の`/api/memos/chat/stream`は廃止し、上記の統一APIを使用してください。
+**注意**: 従来の`/api/memos/chat/stream`は廃止し、上記のAPIを使用してください。
 
 ### 2. レスポンス形式（MemOS準拠SSE）
 
@@ -154,7 +154,7 @@ CocoroCore2/src/
 
 ```python
 """
-CocoroCore2 統一チャットAPI - MemOS直接統合版
+CocoroCore2 チャットAPI - MemOS直接統合版
 """
 
 import logging
@@ -186,7 +186,7 @@ async def chat_stream(
     app=Depends(get_core_app)
 ):
     """
-    統一チャットストリーミングエンドポイント
+    チャットストリーミングエンドポイント
     
     MemOSの出力をそのまま転送 - SSE形式は既に整形済み
     """
