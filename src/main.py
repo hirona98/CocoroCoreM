@@ -10,7 +10,7 @@ import signal
 import sys
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 # Pythonパスにsrcディレクトリを追加
 sys.path.insert(0, str(Path(__file__).parent))
@@ -83,7 +83,7 @@ logger = logging.getLogger(__name__)
 
 # コンポーネントのインポート
 from core.config_manager import CocoroAIConfig, ConfigurationError, load_neo4j_config
-from core.cocoro_product import CocoroProductWrapper
+# CocoroProductWrapperは重いmemosモジュールを含むため使用時に遅延インポート
 from utils.neo4j_manager import Neo4jManager
 from api.health import router as health_router
 from api.control import router as control_router
@@ -96,7 +96,7 @@ class CocoroCore2App:
         self.app: Optional[FastAPI] = None
         self.config: Optional[CocoroAIConfig] = None
         self.neo4j_manager: Optional[Neo4jManager] = None
-        self.cocoro_product: Optional[CocoroProductWrapper] = None
+        self.cocoro_product: Optional[Any] = None  # CocoroProductWrapper（遅延インポート）
         self.server_task: Optional[asyncio.Task] = None
         self.uvicorn_server: Optional[uvicorn.Server] = None
         self._shutdown_event = asyncio.Event()
@@ -208,22 +208,34 @@ class CocoroCore2App:
                         pass
                 raise
             
-            # MOSProduct統合システム初期化
+            # MOSProduct統合システム初期化（遅延インポート）
             logger.info("MOSProduct統合システムを初期化しています...")
             
-            # MemOSのdictConfigを事前に無効化
             try:
-                import memos.log
-                def disabled_dictConfig(config):
-                    pass
-                memos.log.dictConfig = disabled_dictConfig
-                logger.info("MemOSのdictConfigを無効化しました")
+                # CocoroProductWrapperの遅延インポート（memosモジュール含む）
+                logger.info("MemOSモジュールをインポート中...")
+                from core.cocoro_product import CocoroProductWrapper
+                
+                # MemOSのdictConfigを事前に無効化
+                try:
+                    import memos.log
+                    def disabled_dictConfig(config):
+                        pass
+                    memos.log.dictConfig = disabled_dictConfig
+                    logger.info("MemOSのdictConfigを無効化しました")
+                except Exception as e:
+                    logger.warning(f"MemOSのdictConfig無効化に失敗: {e}")
+                
+                self.cocoro_product = CocoroProductWrapper(self.config)
+                await self.cocoro_product.initialize()
+                logger.info("MOSProduct初期化完了")
+                
+            except ImportError as e:
+                logger.error(f"MemOSモジュールのインポートに失敗しました: {e}")
+                raise RuntimeError("MemOSモジュールが利用できません")
             except Exception as e:
-                logger.warning(f"MemOSのdictConfig無効化に失敗: {e}")
-            
-            self.cocoro_product = CocoroProductWrapper(self.config)
-            await self.cocoro_product.initialize()
-            logger.info("MOSProduct初期化完了")
+                logger.error(f"MOSProduct初期化エラー: {e}")
+                raise
             
             logger.info("CocoroCore2初期化完了")
             
