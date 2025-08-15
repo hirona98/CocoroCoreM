@@ -271,22 +271,17 @@ class Neo4jManager:
         
         self.logger.info("Neo4jを停止しています...")
         
-        # Neo4j公式推奨：SIGTERM送信（Ctrl+C相当）
-        if platform.system() == "Windows":
-            self.process.send_signal(signal.CTRL_BREAK_EVENT)
-        else:
-            self.process.send_signal(signal.SIGTERM)
-        
-        # プロセス終了を待機（10秒タイムアウト）
+        # taskkillで確実に停止
         try:
-            await asyncio.wait_for(
-                asyncio.get_event_loop().run_in_executor(None, self.process.wait),
-                timeout=10
+            subprocess.run(
+                f"taskkill /f /t /pid {self.process.pid}",
+                shell=True,
+                check=False,
+                timeout=2
             )
             self.logger.info("Neo4j停止完了")
-        except asyncio.TimeoutError:
-            self.logger.warning("Neo4j停止タイムアウト")
-            self.process.terminate()
+        except Exception as e:
+            self.logger.error(f"Neo4j停止エラー: {e}")
         
         self.process = None
         self.is_running = False
