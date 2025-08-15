@@ -224,19 +224,20 @@ class CocoroCore2App:
             logger.info("MOSProduct統合システムを初期化しています...")
             
             try:
+                # MemOSのdictConfigを事前に無効化（インポート前）
+                import memos.log
+                def disabled_dictConfig(config):
+                    pass
+                memos.log.dictConfig = disabled_dictConfig
+                logger.info("MemOSのdictConfigを事前無効化しました")
+                
                 # CocoroProductWrapperの遅延インポート（memosモジュール含む）
                 logger.info("MemOSモジュールをインポート中...")
                 from core.cocoro_product import CocoroProductWrapper
                 
-                # MemOSのdictConfigを事前に無効化
-                try:
-                    import memos.log
-                    def disabled_dictConfig(config):
-                        pass
-                    memos.log.dictConfig = disabled_dictConfig
-                    logger.info("MemOSのdictConfigを無効化しました")
-                except Exception as e:
-                    logger.warning(f"MemOSのdictConfig無効化に失敗: {e}")
+                # ログ設定を再適用（念のため）
+                setup_logging()
+                logger.info("ログ設定を再適用しました")
                 
                 self.cocoro_product = CocoroProductWrapper(self.config)
                 await self.cocoro_product.initialize()
