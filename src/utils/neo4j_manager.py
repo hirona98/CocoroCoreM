@@ -15,12 +15,29 @@ import time
 from pathlib import Path
 from typing import Dict, Optional
 
-try:
-    from neo4j import GraphDatabase
-    NEO4J_DRIVER_AVAILABLE = True
-except ImportError:
-    NEO4J_DRIVER_AVAILABLE = False
-    GraphDatabase = None
+# Neo4jドライバーは使用時に遅延インポート（起動高速化のため）
+_neo4j_driver_checked = False
+_neo4j_driver_available = False
+_GraphDatabase = None
+
+def _ensure_neo4j_driver():
+    """Neo4jドライバーの遅延インポートと可用性確認"""
+    global _neo4j_driver_checked, _neo4j_driver_available, _GraphDatabase
+    
+    if not _neo4j_driver_checked:
+        try:
+            from neo4j import GraphDatabase
+            _GraphDatabase = GraphDatabase
+            _neo4j_driver_available = True
+            logger.debug("Neo4jドライバーを正常にインポートしました")
+        except ImportError:
+            _neo4j_driver_available = False
+            _GraphDatabase = None
+            logger.warning("Neo4jドライバーが利用できません")
+        finally:
+            _neo4j_driver_checked = True
+    
+    return _neo4j_driver_available, _GraphDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -244,8 +261,10 @@ class Neo4jManager:
         return False
     
     async def _test_connection(self) -> bool:
-        """Neo4j接続テスト"""
-        if not NEO4J_DRIVER_AVAILABLE:
+        """Neo4j接続テスト（遅延インポート対応）"""
+        # Neo4jドライバーの遅延インポート
+        driver_available, GraphDatabase = _ensure_neo4j_driver()
+        if not driver_available:
             return False
             
         try:
