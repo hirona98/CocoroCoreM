@@ -41,25 +41,24 @@ async def system_control(request: SystemControlRequest, app=Depends(get_core_app
     """
     try:
         action = request.action
-        parameters = request.parameters or {}
         
-        logger.info(f"システム制御実行: {action}, パラメータ: {parameters}")
+        logger.info(f"システム制御実行: {action}")
         
         if action == "shutdown":
             # システムシャットダウン
-            result = await _handle_shutdown(app, parameters)
+            result = await _handle_shutdown(app)
             
         elif action == "restart":
             # システム再起動
-            result = await _handle_restart(app, parameters)
+            result = await _handle_restart(app)
             
         elif action == "reload_config":
             # 設定リロード
-            result = await _handle_reload_config(app, parameters)
+            result = await _handle_reload_config(app)
             
         elif action == "clear_cache":
             # キャッシュクリア
-            result = await _handle_clear_cache(app, parameters)
+            result = await _handle_clear_cache(app)
             
         else:
             raise ValueError(f"未対応のアクション: {action}")
@@ -80,7 +79,7 @@ async def system_control(request: SystemControlRequest, app=Depends(get_core_app
         return JSONResponse(status_code=500, content=error_response.dict())
 
 
-async def _handle_shutdown(app, parameters: Dict) -> Dict:
+async def _handle_shutdown(app) -> Dict:
     """システムシャットダウン処理"""
     try:
         # グレースフルシャットダウン
@@ -100,11 +99,11 @@ async def _handle_shutdown(app, parameters: Dict) -> Dict:
         raise
 
 
-async def _handle_restart(app, parameters: Dict) -> Dict:
+async def _handle_restart(app) -> Dict:
     """システム再起動処理"""
     try:
         # 設定リロード（再起動の簡易版）
-        await _handle_reload_config(app, parameters)
+        await _handle_reload_config(app)
         return {"message": "システム設定を再読み込みしました"}
         
     except Exception as e:
@@ -112,7 +111,7 @@ async def _handle_restart(app, parameters: Dict) -> Dict:
         raise
 
 
-async def _handle_reload_config(app, parameters: Dict) -> Dict:
+async def _handle_reload_config(app) -> Dict:
     """設定リロード処理"""
     try:
         if app:
@@ -129,7 +128,7 @@ async def _handle_reload_config(app, parameters: Dict) -> Dict:
         raise
 
 
-async def _handle_clear_cache(app, parameters: Dict) -> Dict:
+async def _handle_clear_cache(app) -> Dict:
     """キャッシュクリア処理"""
     try:
         # 実装に応じてキャッシュクリア処理を追加

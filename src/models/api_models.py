@@ -84,4 +84,3 @@ class MemOSChatRequest(BaseModel):
 class SystemControlRequest(BaseModel):
     """システム制御リクエスト"""
     action: str = Field(..., description="制御アクション")
-    parameters: Optional[Dict] = Field(None, description="制御パラメータ")
