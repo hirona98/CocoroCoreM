@@ -68,6 +68,7 @@ class CocoroAIConfig(BaseModel):
     enable_pro_mode: bool = Field(default=True, description="PRO_MODE（Chain of Thought）を有効にする")
     enable_internet_retrieval: bool = Field(default=False, description="インターネット検索機能を有効にする")
     enable_memory_scheduler: bool = Field(default=True, description="メモリスケジューラーを有効にする（常に有効）")
+    enable_activation_memory: bool = Field(default=False, description="アクティベーションメモリ更新を有効にする（API経由LLMでは通常無効）")
 
     # Memory Scheduler詳細設定
     scheduler_top_k: int = Field(default=5, description="スケジューラーのメモリ取得数")
@@ -77,7 +78,6 @@ class CocoroAIConfig(BaseModel):
     scheduler_thread_pool_max_workers: int = Field(default=8, description="スケジューラーの最大ワーカー数")
     scheduler_consume_interval_seconds: int = Field(default=3, description="メッセージ消費間隔（秒）")
     scheduler_enable_parallel_dispatch: bool = Field(default=True, description="並列メッセージ処理を有効にする")
-    scheduler_enable_act_memory_update: bool = Field(default=False, description="アクティベーションメモリ更新を有効にする（API経由LLMでは通常無効）")
 
     # Internet Retrieval設定
     googleApiKey: str = Field(default="", description="Google Custom Search API キー")
@@ -260,7 +260,7 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig") -> Dict[
             "thread_pool_max_workers": cocoro_config.scheduler_thread_pool_max_workers,
             "consume_interval_seconds": cocoro_config.scheduler_consume_interval_seconds,
             "enable_parallel_dispatch": cocoro_config.scheduler_enable_parallel_dispatch,
-            "enable_act_memory_update": cocoro_config.scheduler_enable_act_memory_update,
+            "enable_act_memory_update": cocoro_config.enable_activation_memory,
         },
     }
 

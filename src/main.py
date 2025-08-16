@@ -285,9 +285,7 @@ class CocoroCore2App:
             )
             
             self.uvicorn_server = uvicorn.Server(config)
-            
-            logger.info(f"CocoroCore2サーバーが起動しました: http://localhost:{port}")
-            
+            logger.info(f"CocoroCore2サーバーが起動しました: http://127.0.0.1:{port}")
             # サーバー実行
             await self.uvicorn_server.serve()
             

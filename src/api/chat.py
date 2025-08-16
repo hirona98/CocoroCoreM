@@ -53,23 +53,20 @@ async def chat_stream(
                 yield 'data: {"type": "end"}\n\n'
                 return
             
-            # cube_idの自動生成（設定ファイルから現在のキャラクター情報を取得）
-            current_character = app.cocoro_product.cocoro_config.current_character
-            if not current_character:
-                error_sse = 'data: {"type": "error", "data": "現在のキャラクターが設定されていません"}\n\n'
+            # 事前設定済みのキューブIDを取得（起動時に確実に設定済み）
+            try:
+                cube_id = app.cocoro_product.get_current_cube_id()
+            except RuntimeError as e:
+                error_sse = f'data: {{"type": "error", "data": "キューブID取得エラー: {str(e)}"}}\n\n'
                 yield error_sse
                 yield 'data: {"type": "end"}\n\n'
                 return
-            
-            # CocoroAIシングルユーザーシステムの標準形式: user_user_{memory_id}_cube
-            memory_id = current_character.userId
-            cube_id = f"user_user_{memory_id}_cube"
             
             # 拡張クエリの構築
             enhanced_query = _build_enhanced_query(request)
             
             # MemOSから直接SSE形式で出力を取得・転送
-            logger.info(f"チャットストリーミング開始: memory_id={memory_id}, cube_id={cube_id}, chat_type={request.chat_type}")
+            logger.info(f"チャットストリーミング開始: cube_id={cube_id}, chat_type={request.chat_type}")
             
             async for sse_chunk in app.cocoro_product.chat_with_references(
                 query=enhanced_query,

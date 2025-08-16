@@ -11,6 +11,7 @@ from pathlib import Path
 
 from memos.mem_os.product import MOSProduct
 from memos import GeneralMemCube
+from memos.configs.mem_cube import GeneralMemCubeConfig
 
 from .config_manager import CocoroAIConfig, generate_memos_config_from_setting, get_mos_config
 
@@ -46,6 +47,9 @@ class CocoroProductWrapper:
         # 現在のユーザーIDを設定
         self.current_user_id = "user"
         
+        # 現在のキャラクターのキューブID（起動時に確定）
+        self.current_cube_id: str = ""
+        
         # システムプロンプトのパスを取得
         self.system_prompt_path = None
         current_character = cocoro_config.current_character
@@ -64,11 +68,79 @@ class CocoroProductWrapper:
             if self.current_user_id not in user_ids:
                 self.register_current_user()
             
+            # 現在のキャラクターのMemCubeを作成・設定
+            self._setup_current_character_cube()
+            
             logger.info(f"CocoroProductWrapper初期化完了: ユーザー={self.current_user_id}")
             
         except Exception as e:
             logger.error(f"CocoroProductWrapper初期化エラー: {e}")
             raise
+    
+    def _setup_current_character_cube(self):
+        """現在のキャラクターのMemCubeを作成・設定（起動時1回のみ）"""
+        # 現在のキャラクター情報を確認
+        current_character = self.cocoro_config.current_character
+        if not current_character:
+            raise RuntimeError("現在のキャラクターが設定されていません")
+        
+        if not current_character.memoryId:
+            raise RuntimeError(f"キャラクター '{current_character.modelName}' のmemoryIdが設定されていません")
+        
+        # キューブIDを生成・設定
+        self.current_cube_id = f"user_user_{current_character.memoryId}_cube"
+        
+        # 既存のキューブリストを取得
+        existing_cubes = self.mos_product.user_manager.get_user_cubes(self.current_user_id)
+        existing_cube_ids = {getattr(cube, 'cube_id', str(cube)) for cube in existing_cubes}
+        
+        if self.current_cube_id in existing_cube_ids:
+            # 既存キューブを使用
+            logger.info(f"既存キューブを使用: {self.current_cube_id} (キャラクター: {current_character.modelName})")
+        else:
+            # 新規作成
+            logger.info(f"新規キューブを作成: {self.current_cube_id} (キャラクター: {current_character.modelName})")
+            self._create_cube(current_character)
+    
+    def _create_cube(self, character):
+        """キューブ作成処理"""
+        cube_name = f"user_user_{character.memoryId}_cube"
+        
+        # 1. GeneralMemCubeConfig作成
+        cube_config = GeneralMemCubeConfig(
+            user_id=self.current_user_id,
+            cube_id=self.current_cube_id
+        )
+        
+        # 2. GeneralMemCubeオブジェクト作成
+        mem_cube = GeneralMemCube(cube_config)
+        
+        # 3. データベースにキューブレコードを作成
+        created_cube_id = self.mos_product.create_cube_for_user(
+            cube_name=cube_name,
+            owner_id=self.current_user_id,
+            cube_id=self.current_cube_id
+        )
+        
+        # 4. メモリにキューブを登録
+        # テキスト検索のためtext_memは基本必須（MemOS公式仕様）
+        memory_types = ["text_mem"]
+        if self.cocoro_config.enable_activation_memory:
+            memory_types.append("act_mem")
+        
+        self.mos_product.register_mem_cube(
+            mem_cube_name_or_path_or_object=mem_cube,
+            mem_cube_id=created_cube_id,
+            user_id=self.current_user_id,
+            memory_types=memory_types,
+            default_config=None
+        )
+        
+        logger.info(f"キューブ作成完了: {self.current_cube_id}")
+    
+    def get_current_cube_id(self) -> str:
+        """現在のキューブIDを取得"""
+        return self.current_cube_id
     
     def register_current_user(self):
         """ユーザーを登録"""
