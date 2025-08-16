@@ -34,21 +34,62 @@ class HealthCheckFilter(logging.Filter):
         return not (hasattr(record, 'getMessage') and '/api/health' in record.getMessage())
 
 
+class TruncatingFormatter(logging.Formatter):
+    """メッセージ長を制限するカスタムフォーマッター（レベル別対応）"""
+    
+    def __init__(self, fmt=None, datefmt=None, max_length=1000, level_specific_lengths=None, truncate_marker="...", enable_truncation=True):
+        super().__init__(fmt, datefmt)
+        self.max_length = max_length  # デフォルト値
+        self.level_specific_lengths = level_specific_lengths or {}
+        self.truncate_marker = truncate_marker
+        self.enable_truncation = enable_truncation
+    
+    def format(self, record):
+        # 元のフォーマット処理
+        formatted = super().format(record)
+        
+        # 長さ制限（有効な場合のみ）
+        if self.enable_truncation:
+            # レベル別制限を取得（なければデフォルト値を使用）
+            max_length = self.level_specific_lengths.get(record.levelname, self.max_length)
+            
+            if len(formatted) > max_length:
+                truncate_point = max_length - len(self.truncate_marker)
+                formatted = formatted[:truncate_point] + self.truncate_marker
+        
+        return formatted
+
+
 def setup_logging():
     """ログ設定を初期化"""
-    # ログフォーマット
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    # アプリケーション設定からログ設定を取得
+    app_instance = get_app_instance()
+    if app_instance and app_instance.config:
+        log_config = app_instance.config.logging
+    else:
+        # デフォルト設定
+        from core.config_manager import LoggingConfig
+        log_config = LoggingConfig()
+    
+    # カスタムフォーマッター（レベル別ログ長制限付き）
+    formatter = TruncatingFormatter(
+        fmt=log_config.format,
+        max_length=log_config.max_message_length,
+        level_specific_lengths=log_config.level_specific_lengths,
+        truncate_marker=log_config.truncate_marker,
+        enable_truncation=log_config.enable_truncation
+    )
     
     # ルートロガー設定
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(getattr(logging, log_config.level.upper(), logging.INFO))
     
     # 既存のハンドラーをクリア
     root_logger.handlers.clear()
     
     # コンソールハンドラー
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(getattr(logging, log_config.level.upper(), logging.INFO))
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
     
@@ -56,12 +97,12 @@ def setup_logging():
     try:
         from logging.handlers import RotatingFileHandler
         file_handler = RotatingFileHandler(
-            log_dir / "cocoro_core2.log",
-            maxBytes=10 * 1024 * 1024,  # 10MB
-            backupCount=5,
+            log_dir / log_config.file.split('/')[-1],  # ファイル名部分のみ使用
+            maxBytes=log_config.max_size_mb * 1024 * 1024,
+            backupCount=log_config.backup_count,
             encoding='utf-8'
         )
-        file_handler.setLevel(logging.INFO)
+        file_handler.setLevel(getattr(logging, log_config.level.upper(), logging.INFO))
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
     except Exception as e:
