@@ -129,14 +129,6 @@ class CocoroCore2App:
             from api import health
             health._app_instance = self
             
-            # mcp.pyのインスタンス更新
-            from api import mcp
-            mcp._app_instance = self
-            
-            # users.pyのインスタンス更新
-            from api import users
-            users._app_instance = self
-            
             # chat.pyのインスタンス更新
             from api import chat
             chat._app_instance = self

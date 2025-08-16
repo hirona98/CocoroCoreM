@@ -4,148 +4,9 @@
 
 CocoroCore2の`/api/chat/stream`エンドポイント実装について、CocoroDockとの統合を考慮した詳細設計を記載します。
 
-## 🚨 重要な発見と課題
-
-### エンドポイント
-
-**現状の問題**:
-- API仕様書: `/api/chat/stream` 
-- CocoroDock実装: `/api/memos/chat/stream`を呼び出している（CocoroCoreClient.cs:328）
-
-**解決策**: 
-- `/api/chat/stream`に
-- `/api/memos/chat/stream`は**廃止**
-- CocoroDockの実装を修正してエンドポイントを変更
-
-### 実装方針の重要な修正
-
-**⚠️ MemOS調査により設計を修正**:
-
-- ❌ **SSEHelper不要**: MemOSが既にSSE形式（`data: {...}\n\n`）で出力
-- ✅ **CocoroProductWrapper**: MemOS統合（`src/core/cocoro_product.py`）
-- ✅ **FastAPI基盤**: 非同期、依存性注入対応
-- ⚠️ **ステータスメッセージ制限**: MemOSは数字コード（`"0"`, `"1"`, `"2"`）のみ提供
-
 ## 実装仕様
 
-### 1. APIエンドポイント仕様
-
-#### 1.1 基本情報
-
-**エンドポイント**:
-- `POST /api/chat/stream` （新規実装）
-- `/api/memos/chat/stream` は**廃止**
-
-**Content-Type**: 
-- Request: `application/json`
-- Response: `text/event-stream`
-
-#### 1.2 リクエスト形式
-
-##### API仕様 (`/api/chat/stream`)
-
-```json
-{
-  "query": "今日の予定を教えて",
-  "chat_type": "text",
-  "images": [
-    {
-      "data": "data:image/png;base64,iVBORw0KGgo..."
-    }
-  ],
-  "notification": {
-    "from": "LINE",
-    "original_message": "写真が送信されました"
-  },
-  "desktop_context": {
-    "window_title": "Visual Studio Code",
-    "application": "vscode",
-    "capture_type": "active",
-    "timestamp": "2025-01-15T10:30:00Z"
-  },
-  "history": [
-    {
-      "role": "user",
-      "content": "こんにちは",
-      "timestamp": "2025-01-15T10:25:00Z"
-    }
-  ],
-  "internet_search": true,
-  "request_id": "req_12345"
-}
-```
-
-**フィールド詳細**:
-- `query`: ユーザークエリ（必須）
-- `chat_type`: チャットタイプ（`text`, `text_image`, `notification`, `desktop_watch`）
-- **注意**: `cube_id`はAPIリクエストから削除され、Setting.jsonから自動決定されます
-- `images`: 画像データ配列（Base64 data URLフォーマット）
-- `notification`: 通知データ（chat_type=notification時）
-- `desktop_context`: デスクトップコンテキスト（chat_type=desktop_watch時）
-- `history`: 会話履歴（オプション）
-- `internet_search`: インターネット検索有効化（オプション）
-- `request_id`: リクエスト識別ID（オプション）
-
-**注意**: 従来の`/api/memos/chat/stream`は廃止し、上記のAPIを使用してください。
-
-### 2. レスポンス形式（MemOS準拠SSE）
-
-#### 2.1 実際のMemOS出力形式
-
-**⚠️ MemOSが直接出力するSSE形式**:
-
-```
-Content-Type: text/event-stream
-Cache-Control: no-cache
-Connection: keep-alive
-
-data: {"type": "status", "data": "0"}
-
-data: {"type": "text", "data": "こんにちは！"}
-
-data: {"type": "text", "data": "今日はどのような"}
-
-data: {"type": "reference", "data": [...]}
-
-data: {"type": "time", "data": {"total_time": 1.23, "speed_improvement": "15%"}}
-
-data: {"type": "end"}
-```
-
-#### 2.2 MemOS実装準拠イベント仕様
-
-**MemOS MOSProduct.chat_with_references()の実際の出力**:
-
-| タイプ | データ形式 | 説明 | 送信タイミング |
-|-------|-----------|------|-------------|
-| `status` | `"0"`, `"1"`, `"2"` | 数字ステータスコード | 各処理段階で1回 |
-| `text` | `"テキストチャンク"` | 応答テキスト文字列 | ストリーミング中継続 |
-| `reference` | `[{memory_id, reference_number, ...}]` | 参照記憶配列 | 応答完了後 |
-| `time` | `{total_time, speed_improvement}` | 処理時間統計 | 応答完了後 |
-| `end` | なし | ストリーム終了 | 最終 |
-| `error` | `"エラーメッセージ"` | エラー文字列 | エラー発生時 |
-
-**StatusEvent数字コード**:
-- `"0"`: メモリ検索開始
-- `"1"`: メモリ検索完了
-- `"2"`: LLM応答生成開始
-
 ### 3. 実装詳細
-
-#### 3.1 簡略化されたファイル構成
-
-**⚠️ streaming.py は不要** - MemOSが既にSSE形式で出力:
-
-```
-CocoroCore2/src/
-├── api/
-│   └── chat.py                  # 新規作成 - 軽量チャットエンドポイント
-├── core/
-│   ├── cocoro_product.py        # 既存 - MemOS統合（修正不要）
-│   └── image_analyzer.py        # 新規作成 - 画像分析
-└── models/
-    └── chat_models.py           # 新規作成 - チャット関連モデル
-```
 
 #### 3.2 軽量チャットエンドポイント実装 (`api/chat.py`)
 
@@ -259,17 +120,6 @@ def _build_enhanced_query(request: ChatRequest, analyzed_images=None) -> str:
     return base_query
 ```
 
-#### 3.3 CocoroDock側の変更が必要
-
-**CocoroCoreClient.cs の修正**:
-```csharp
-// 変更前: 
-var requestUrl = $"{_baseUrl}/api/memos/chat/stream";
-
-// 変更後:
-var requestUrl = $"{_baseUrl}/api/chat/stream";
-```
-
 #### 3.4 画像分析実装 (`core/image_analyzer.py`)
 
 ```python
@@ -379,38 +229,8 @@ class ImageAnalyzer:
             raise
 ```
 
-### 4. CocoroDock側の必要な変更
-
-**⚠️ CocoroDock側の変更が必要**:
-
-1. **CocoroCoreClient.cs の修正**:
-   - エンドポイントURL: `/api/memos/chat/stream` → `/api/chat/stream`
-   
-2. **SSE処理**: 既存のStreamReader処理は継続使用可能
-
-3. **段階的移行**:
-   - まずCocoroCore2で新APIを実装
-   - 次にCocoroDockのエンドポイントとリクエスト形式を変更
-
-### 5. main.pyへの統合
-
-**簡単な1行追加のみ**:
-
-```python
-# main.py に追加
-from api.chat import router as chat_router
-
-# APIルーター追加部分（initialize()メソッド内）
-self.app.include_router(chat_router)
-```
 
 ## 実装優先度
-
-### フェーズ1: 軽量実装 🔥 **大幅簡略化**
-1. **`api/chat.py`**: 軽量エンドポイント実装（MemOS転送のみ）
-2. **`models/chat_models.py`**: データモデル定義
-3. **main.pyにルーター追加**: 1行のみ追加
-4. **CocoroDock修正**: エンドポイントとリクエスト形式変更
 
 ### フェーズ2: 画像対応 🎯
 5. **`core/image_analyzer.py`**: Vision LLM統合
@@ -419,32 +239,3 @@ self.app.include_router(chat_router)
 ### フェーズ3: 特殊機能 🔧
 7. **notificationチャット**: 通知処理の完全実装
 8. **desktop_watchチャット**: デスクトップ監視の統合
-
-## テスト計画
-
-### 単体テスト
-- [ ] `ChatRequest`バリデーション
-- [ ] SSE形式変換
-- [ ] 画像分析エラーハンドリング
-
-## 注意事項とリスク
-
-### 運用リスク  
-- **APIキー管理**: セキュアな設定管理が必要
-- **ログ機密性**: 画像内容のログ出力制御
-- **エラー処理**: 部分的な失敗時の継続処理
-
-## 結論 - 大幅簡略化により超高速実装可能
-
-**⚠️ MemOS調査により設計を根本的に修正**:
-
-✅ **SSEHelper不要**: MemOSが既にSSE形式で出力済み
-✅ **軽量実装**: MemOSの出力をそのまま転送するだけ  
-✅ **高速開発**: 複雑なSSE形式作成が不要
-
-**移行手順**:
-1. CocoroCore2で軽量API実装（MemOS転送のみ）
-2. CocoroDockのエンドポイント変更
-3. 旧`/api/memos/chat/stream`を完全廃止
-
-**超高速実装可能**: MemOS統合により複雑性を大幅削減
