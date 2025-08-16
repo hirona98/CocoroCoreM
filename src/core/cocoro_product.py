@@ -44,11 +44,11 @@ class CocoroProductWrapper:
         self.message_generator = None
         
         # 現在のユーザーIDを設定
-        current_character = cocoro_config.current_character
-        self.current_user_id = current_character.userId if current_character else "user"
+        self.current_user_id = "user"
         
         # システムプロンプトのパスを取得
         self.system_prompt_path = None
+        current_character = cocoro_config.current_character
         if current_character and current_character.systemPromptFilePath:
             # UserData2ディレクトリからの相対パス
             base_dir = Path(__file__).parent.parent.parent / "UserData2"
@@ -58,7 +58,7 @@ class CocoroProductWrapper:
         """非同期初期化処理"""
         try:
             # ユーザーが未登録の場合は登録
-            users = self.mos_product.list_users()
+            users = self.mos_product.list_users() # CocoroAIでは"user"が一つのみ固定
             # usersはUserオブジェクトのリストなので属性でアクセス
             user_ids = [u.user_id if hasattr(u, 'user_id') else str(u) for u in users]
             if self.current_user_id not in user_ids:
@@ -71,20 +71,16 @@ class CocoroProductWrapper:
             raise
     
     def register_current_user(self):
-        """現在のキャラクターをユーザーとして登録"""
+        """ユーザーを登録"""
         try:
-            current_character = self.cocoro_config.current_character
-            if not current_character:
-                raise ValueError("現在のキャラクターが設定されていません")
-            
-            # ユーザー登録
+            # CocoroAIはシングルユーザーシステムのため、user_nameは"user"に固定
             self.mos_product.user_register(
-                user_id=self.current_user_id,
-                user_name=current_character.modelName,
+                user_id="user",
+                user_name="user",  # 識別用なので何でも良い
                 config=get_mos_config(self.cocoro_config)
             )
             
-            logger.info(f"ユーザー登録完了: {self.current_user_id} ({current_character.modelName})")
+            logger.info(f"ユーザー登録完了: {self.current_user_id}")
             
         except Exception as e:
             logger.error(f"ユーザー登録エラー: {e}")
@@ -93,8 +89,8 @@ class CocoroProductWrapper:
     async def chat_with_references(
         self,
         query: str,
+        cube_id: str, # CocoroAIではキャラクター指定のために必須
         user_id: Optional[str] = None,
-        cube_id: Optional[str] = None,
         history: Optional[List] = None,
         internet_search: bool = False
     ) -> AsyncIterator[str]:
@@ -103,8 +99,8 @@ class CocoroProductWrapper:
         
         Args:
             query: ユーザークエリ
+            cube_id: メモリキューブID
             user_id: ユーザーID（省略時は現在のユーザー）
-            cube_id: メモリキューブID（省略時はデフォルト）
             history: 会話履歴
             internet_search: インターネット検索を有効にするか
             
@@ -174,7 +170,7 @@ class CocoroProductWrapper:
             raise
     
     def delete_all_memories(self, user_id: str) -> bool:
-        """ユーザーの全記憶削除"""
+        """ユーザー（キューブではない、基本的にはuser固定）の全記憶削除"""
         try:
             # ユーザーのメモリキューブを取得
             user_info = self.mos_product.get_user_info(user_id)

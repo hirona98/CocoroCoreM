@@ -9,6 +9,7 @@ CocoroCore2は、MemOS（Memory Operating System）のMOSProductをベースと�
 - **マルチモーダル対話**: テキスト+画像対応のストリーミングチャット
 - **完全自動記憶管理**: MemScheduler統合による全自動記憶保存・整理・最適化
 - **高度記憶機能**: MemOS統合によるNeo4j+SQLiteベースの永続記憶
+- **キューブID自動決定**: Setting.jsonから自動生成
 - **通知・監視機能**: 外部通知とデスクトップ監視の独り言生成
 - **設定統合管理**: Setting.json統合による動的設定変換
 - **ログ統合管理**: CocoroDockとの連携ログシステム
@@ -182,7 +183,7 @@ def generate_memos_config_from_setting(cocoro_config: CocoroAIConfig):
     current_character = cocoro_config.current_character
     
     return {
-        "user_id": current_character.userId,  # MemOS内部的にはuser_idとして扱われる（実質cube_id）
+        "user_id": "user",
         "chat_model": {
             "backend": "openai",
             "config": {
@@ -220,7 +221,7 @@ def generate_memos_config_from_setting(cocoro_config: CocoroAIConfig):
 #### 通常チャット（確証：product.py:728-899 + CocoroCoreClient.cs仕様）
 ```
 1. CocoroDock → POST /api/chat/stream
-2. ChatRequest受信（query, cube_id, chat_type, images, notification, desktop_context）
+2. ChatRequest受信（query, chat_type, images, notification, desktop_context）
 3. chat_type判定による処理分岐（text|text_image|notification|desktop_watch）
 4. 画像ありの場合：
    a. Base64デコード・検証

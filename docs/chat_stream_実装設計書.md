@@ -47,7 +47,6 @@ CocoroCore2の`/api/chat/stream`エンドポイント実装について、Cocoro
 ```json
 {
   "query": "今日の予定を教えて",
-  "cube_id": "character_123_cube",
   "chat_type": "text",
   "images": [
     {
@@ -78,8 +77,8 @@ CocoroCore2の`/api/chat/stream`エンドポイント実装について、Cocoro
 
 **フィールド詳細**:
 - `query`: ユーザークエリ（必須）
-- `cube_id`: メモリキューブID（必須）
 - `chat_type`: チャットタイプ（`text`, `text_image`, `notification`, `desktop_watch`）
+- **注意**: `cube_id`はAPIリクエストから削除され、Setting.jsonから自動決定されます
 - `images`: 画像データ配列（Base64 data URLフォーマット）
 - `notification`: 通知データ（chat_type=notification時）
 - `desktop_context`: デスクトップコンテキスト（chat_type=desktop_watch時）
@@ -193,8 +192,11 @@ async def chat_stream(
     
     async def generate_stream() -> AsyncIterator[str]:
         try:
-            # 1. cube_idの自動生成
-            cube_id = request.cube_id or f"{request.cube_id}_cube"
+            # 1. cube_idの自動決定（Setting.jsonから）
+            current_character = app.config.current_character
+            if not current_character:
+                raise ValueError("現在のキャラクターが設定されていません")
+            cube_id = f"user_{current_character.userId}_cube"
             
             # 2. 画像分析（必要時）
             enhanced_query = request.query
@@ -267,9 +269,6 @@ var requestUrl = $"{_baseUrl}/api/memos/chat/stream";
 // 変更後:
 var requestUrl = $"{_baseUrl}/api/chat/stream";
 ```
-
-**リクエスト形式の調整**:
-従来の`MemOSChatRequest`から新しい`ChatRequest`形式に変更が必要です。
 
 #### 3.4 画像分析実装 (`core/image_analyzer.py`)
 
@@ -386,7 +385,6 @@ class ImageAnalyzer:
 
 1. **CocoroCoreClient.cs の修正**:
    - エンドポイントURL: `/api/memos/chat/stream` → `/api/chat/stream`
-   - リクエスト形式: `MemOSChatRequest` → 新API仕様の`ChatRequest`
    
 2. **SSE処理**: 既存のStreamReader処理は継続使用可能
 
@@ -427,7 +425,6 @@ self.app.include_router(chat_router)
 ### 単体テスト
 - [ ] `ChatRequest`バリデーション
 - [ ] SSE形式変換
-- [ ] MemOSChatRequest→ChatRequest変換
 - [ ] 画像分析エラーハンドリング
 
 ## 注意事項とリスク

@@ -89,11 +89,12 @@ GET /api/mcp/tool-registration-log
 
 CocoroDockからのチャットリクエストを処理し、ストリーミング形式で応答を返します。
 
+**キューブID自動決定**: リクエストでcube_idを指定する必要はありません。CocoroCore2内部でSetting.jsonの現在のキャラクター情報から自動的に決定されます。
+
 **リクエスト**
 ```json
 {
   "query": "今日の予定を教えて",
-  "cube_id": "character_123_cube",
   "chat_type": "text",
   "images": [
     {
@@ -124,7 +125,6 @@ CocoroDockからのチャットリクエストを処理し、ストリーミン�
 
 **フィールド説明**
 - `query`: ユーザークエリ（必須）
-- `cube_id`: メモリキューブID（必須）
 - `chat_type`: チャットタイプ（必須）
   - `text`: テキストのみチャット
   - `text_image`: テキスト+画像チャット
@@ -175,19 +175,20 @@ data: {"type": "error", "data": {"error_code": "image_analysis_failed", "message
 
 ### キューブ記憶統計
 
-#### `GET /api/memory/cube/{cube_id}/stats`
+#### `GET /api/memory/user/{memory_id}/stats`
 
-指定キューブの記憶統計情報を取得します。
+指定メモリキューブの記憶統計情報を取得します。
 
 **リクエスト**
 ```
-GET /api/memory/cube/character_123_cube/stats
+GET /api/memory/user/listy/stats
 ```
 
 **レスポンス**
 ```json
 {
-  "cube_id": "character_123_cube",
+  "memory_id": "listy",
+  "cube_id": "user_user_listy_cube",
   "total_memories": 150,
   "text_memories": 120,
   "activation_memories": 20,
@@ -201,20 +202,20 @@ GET /api/memory/cube/character_123_cube/stats
 
 ### キューブ記憶削除
 
-#### `DELETE /api/memory/cube/{cube_id}/all`
+#### `DELETE /api/memory/user/{memory_id}/all`
 
-指定キューブの全記憶を削除します。
+指定メモリキューブの全記憶を削除します。
 
 **リクエスト**
 ```
-DELETE /api/memory/cube/character_123_cube/all
+DELETE /api/memory/user/listy/all
 ```
 
 **レスポンス**
 ```json
 {
   "status": "success",
-  "message": "ユーザー user123 の記憶を削除しました",
+  "message": "listyの記憶を削除しました",
   "timestamp": "2025-01-01T12:00:00Z"
 }
 ```
@@ -236,14 +237,16 @@ GET /api/cubes
 ```json
 {
   "status": "success",
-  "message": "2つのキャラクターキューブを取得しました",
+  "message": "2つのメモリキューブを取得しました",
   "data": [
     {
-      "cube_id": "character_miku_cube",
+      "memory_id": "miku",
+      "cube_id": "user_user_miku_cube",
       "character_name": "初音ミク"
     },
     {
-      "cube_id": "character_tsukuyomi_cube", 
+      "memory_id": "tsukuyomichan",
+      "cube_id": "user_user_tsukuyomichan_cube", 
       "character_name": "つくよみちゃん"
     }
   ]

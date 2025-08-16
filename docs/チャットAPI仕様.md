@@ -26,7 +26,6 @@ POST /api/chat/stream
 interface ChatRequest {
   // 基本情報
   query: string;                    // ユーザークエリ（必須）
-  cube_id: string;                  // メモリキューブID（必須） - CocoroAIは単一ユーザーシステムのため、キャラクター別のキューブIDで識別
   
   // 機能識別
   chat_type: "text" | "text_image" | "notification" | "desktop_watch";
@@ -156,7 +155,6 @@ interface EndEvent {
 // リクエスト例
 {
   "query": "今日の予定を教えて",
-  "cube_id": "character_123_cube",
   "chat_type": "text",
   "internet_search": true
 }
@@ -175,7 +173,6 @@ interface EndEvent {
 // リクエスト例（ファイルから）
 {
   "query": "この画像について教えて",
-  "cube_id": "character_123_cube",
   "chat_type": "text_image",
   "images": [{
     "data": "data:image/jpeg;base64,/9j/4AAQ..."
@@ -185,7 +182,6 @@ interface EndEvent {
 // リクエスト例（クリップボードから貼り付け）
 {
   "query": "この画像について教えて",
-  "cube_id": "character_123_cube",
   "chat_type": "text_image",
   "images": [{
     "data": "data:image/png;base64,iVBORw0KGgo..."  // 常にPNG形式
@@ -213,12 +209,10 @@ interface EndEvent {
 // リクエスト例
 {
   "query": "通知への反応をお願いします",
-  "cube_id": "character_123_cube",
   "chat_type": "notification", 
   "notification": {
     "from": "LINE",
-    "original_message": "写真が送信されました",
-    "app_type": "messaging"
+    "original_message": "写真が送信されました"
   },
   "images": [/* 画像データ */]
 }
@@ -241,7 +235,6 @@ interface EndEvent {
 // リクエスト例
 {
   "query": "",  // デスクトップウォッチでは自動生成されるため空文字
-  "cube_id": "character_123_cube",
   "chat_type": "desktop_watch",
   "desktop_context": {
     "window_title": "Visual Studio Code",
@@ -261,4 +254,3 @@ interface EndEvent {
    - 画面内容に応じた感想・ツッコミ
    - 1-2文の簡潔な独り言
 4. **応答配信**: 独り言をストリーミング配信
-

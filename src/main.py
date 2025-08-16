@@ -98,8 +98,6 @@ from core.config_manager import CocoroAIConfig, ConfigurationError, load_neo4j_c
 from utils.neo4j_manager import Neo4jManager
 from api.health import router as health_router
 from api.control import router as control_router
-from api.mcp import router as mcp_router
-from api.users import router as users_router
 from api.chat import router as chat_router
 
 
@@ -188,8 +186,6 @@ class CocoroCore2App:
             # APIルーター追加
             self.app.include_router(health_router)
             self.app.include_router(control_router)
-            self.app.include_router(mcp_router)
-            self.app.include_router(users_router)
             self.app.include_router(chat_router)
             
             # 依存性注入のためのグローバルインスタンス更新

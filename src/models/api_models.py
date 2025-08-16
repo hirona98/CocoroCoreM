@@ -28,16 +28,16 @@ class HealthCheckResponse(BaseModel):
     status: str = "healthy"
 
 
-class UsersListResponse(BaseModel):
+class MemorysListResponse(BaseModel):
     """ユーザーリストレスポンス"""
     success: bool = True
-    users: List[Dict]
+    memorys: List[Dict]
 
 
-class UserInfoResponse(BaseModel):
+class MemoryInfoResponse(BaseModel):
     """ユーザー情報レスポンス"""
     success: bool = True
-    user_info: Dict
+    memory_info: Dict
 
 
 class MemoryStatsResponse(BaseModel):
@@ -58,16 +58,6 @@ class ImageContext(BaseModel):
     source_type: str = Field(..., description="chat|notification|desktop_monitoring")
     images: List[str] = Field(default_factory=list, description="Base64画像配列")
     notification_from: Optional[str] = Field(None, description="通知元（通知時のみ）")
-
-
-class MemOSChatRequest(BaseModel):
-    """MemOSチャットリクエスト"""
-    query: str = Field(..., description="ユーザークエリ")
-    user_id: str = Field(..., description="ユーザーID")
-    context: Optional[ImageContext] = Field(None, description="コンテキスト情報")
-    cube_id: Optional[str] = Field(None, description="メモリキューブID")
-    history: Optional[List[Dict]] = Field(None, description="会話履歴")
-    internet_search: Optional[bool] = Field(False, description="インターネット検索を有効にするか")
 
 
 class SystemControlRequest(BaseModel):
@@ -110,7 +100,6 @@ class HistoryMessage(BaseModel):
 class ChatRequest(BaseModel):
     """チャットAPIリクエスト"""
     query: str = Field(..., description="ユーザークエリ")
-    cube_id: str = Field(..., description="メモリキューブID")
     chat_type: Literal["text", "text_image", "notification", "desktop_watch"] = Field(..., description="チャットタイプ")
     images: Optional[List[ImageData]] = Field(default=None, description="画像データ配列")
     notification: Optional[NotificationData] = Field(default=None, description="通知データ")
