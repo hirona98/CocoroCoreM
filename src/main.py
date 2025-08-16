@@ -140,7 +140,6 @@ from core.config_manager import CocoroAIConfig, ConfigurationError, load_neo4j_c
 from utils.neo4j_manager import Neo4jManager
 from api.health import router as health_router
 from api.control import router as control_router
-from api.chat import router as chat_router
 from api.websocket_chat import router as websocket_router
 
 
@@ -171,10 +170,6 @@ class CocoroCore2App:
             # health.pyのインスタンス更新
             from api import health
             health._app_instance = self
-            
-            # chat.pyのインスタンス更新
-            from api import chat
-            chat._app_instance = self
             
             logger.info("ルーターのグローバルインスタンスを更新しました")
             
@@ -221,7 +216,6 @@ class CocoroCore2App:
             # APIルーター追加
             self.app.include_router(health_router)
             self.app.include_router(control_router)
-            self.app.include_router(chat_router)
             self.app.include_router(websocket_router)
             
             # FastAPIのstate経由でアプリケーションインスタンスを保存
