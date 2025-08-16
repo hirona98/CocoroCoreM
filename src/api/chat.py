@@ -7,7 +7,7 @@ MemOSの出力をそのまま転送する軽量実装
 import logging
 from typing import AsyncIterator
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from models.api_models import ChatRequest
@@ -15,17 +15,16 @@ from models.api_models import ChatRequest
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["chat"])
 
-# グローバルアプリケーションインスタンス
-_app_instance = None
-
-
-def get_core_app():
+def get_core_app(request: Request):
     """CoreAppの依存性注入"""
-    global _app_instance
-    if _app_instance is None:
-        from main import get_app_instance
-        _app_instance = get_app_instance()
-    return _app_instance
+    # FastAPIのstate経由でアプリケーションインスタンスを取得
+    core_app = getattr(request.app.state, 'core_app', None)
+    if core_app is None:
+        raise HTTPException(
+            status_code=503,
+            detail="アプリケーションが初期化されていません"
+        )
+    return core_app
 
 
 @router.post("/chat/stream")

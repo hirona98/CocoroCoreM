@@ -180,6 +180,9 @@ class CocoroCore2App:
             self.app.include_router(control_router)
             self.app.include_router(chat_router)
             
+            # FastAPIのstate経由でアプリケーションインスタンスを保存
+            self.app.state.core_app = self
+            
             # 依存性注入のためのグローバルインスタンス更新
             self._update_router_instances()
             
