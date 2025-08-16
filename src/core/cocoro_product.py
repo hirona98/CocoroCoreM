@@ -92,25 +92,62 @@ class CocoroProductWrapper:
         
         # 既存のキューブリストを取得
         existing_cubes = self.mos_product.user_manager.get_user_cubes(self.current_user_id)
-        existing_cube_ids = {getattr(cube, 'cube_id', str(cube)) for cube in existing_cubes}
+        existing_cube = None
+        for cube in existing_cubes:
+            cube_id = getattr(cube, 'cube_id', str(cube))
+            if cube_id == self.current_cube_id:
+                existing_cube = cube
+                break
         
-        if self.current_cube_id in existing_cube_ids:
-            # 既存キューブを使用
+        if existing_cube and getattr(existing_cube, 'cube_path', None) is not None:
+            # 既存キューブを使用（cube_pathが有効な場合のみ）
             logger.info(f"既存キューブを使用: {self.current_cube_id} (キャラクター: {current_character.modelName})")
         else:
-            # 新規作成
-            logger.info(f"新規キューブを作成: {self.current_cube_id} (キャラクター: {current_character.modelName})")
+            # 新規作成またはcube_pathがNoneの場合は再作成
+            if existing_cube:
+                logger.warning(f"既存キューブのcube_pathがNullのため再作成: {self.current_cube_id}")
+            else:
+                logger.info(f"新規キューブを作成: {self.current_cube_id} (キャラクター: {current_character.modelName})")
             self._create_cube(current_character)
     
     def _create_cube(self, character):
         """キューブ作成処理"""
         cube_name = f"{character.modelName}_{character.memoryId}_cube"
         
+        # setting.jsonと同じUserData2ディレクトリにキューブデータを保存
+        # config_manager.pyと同じロジックでUserData2を探す
+        base_dir = Path(__file__).parent.parent
+        user_data_paths = [
+            base_dir.parent / "UserData2",  # CocoroCore2/../UserData2/
+            base_dir.parent.parent / "UserData2",  # CocoroAI/UserData2/
+        ]
+        
+        user_data_dir = None
+        for path in user_data_paths:
+            if path.exists():
+                user_data_dir = path
+                break
+        
+        if user_data_dir is None:
+            # デフォルトは一つ上のディレクトリに作成
+            user_data_dir = base_dir.parent / "UserData2"
+        
+        # Memory ディレクトリ下にキューブデータを保存
+        memory_dir = user_data_dir / "Memory"
+        cube_data_dir = memory_dir / "cubes"
+        cube_data_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 個別のキューブディレクトリを明示的に作成
+        cube_path_dir = cube_data_dir / self.current_cube_id
+        cube_path_dir.mkdir(parents=True, exist_ok=True)
+        cube_path = str(cube_path_dir)
+        
         # 1. データベースにキューブレコードを作成
         created_cube_id = self.mos_product.create_cube_for_user(
             cube_name=cube_name,
             owner_id=self.current_user_id,
-            cube_id=self.current_cube_id
+            cube_id=self.current_cube_id,
+            cube_path=cube_path
         )
         
         # 2. GeneralMemCubeConfig作成（作成されたIDを使用）

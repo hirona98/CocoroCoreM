@@ -245,6 +245,28 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig") -> Dict[
     embedded_model = current_character.embeddedModel or "text-embedding-3-large"
     embedded_api_key = current_character.embeddedApiKey or api_key  # APIキーが空なら通常のを使用
 
+    # UserData2ディレクトリを探す（DBファイル保存用）
+    base_dir = Path(__file__).parent.parent
+    user_data_paths = [
+        base_dir.parent / "UserData2",  # CocoroCore2/../UserData2/
+        base_dir.parent.parent / "UserData2",  # CocoroAI/UserData2/
+    ]
+    
+    user_data_dir = None
+    for path in user_data_paths:
+        if path.exists():
+            user_data_dir = path
+            break
+    
+    if user_data_dir is None:
+        # デフォルトは一つ上のディレクトリに作成
+        user_data_dir = base_dir.parent / "UserData2"
+    
+    # Memory ディレクトリを作成し、memos_users.dbのパスを設定
+    memory_dir = user_data_dir / "Memory"
+    memory_dir.mkdir(parents=True, exist_ok=True)
+    db_path = str(memory_dir / "memos_users.db")
+
     # MemOS設定を動的に構築
     memos_config = {
         "user_id": "user",
@@ -256,6 +278,14 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig") -> Dict[
                 "embedder": {"backend": "universal_api", "config": {"model_name_or_path": embedded_model, "provider": "openai", "api_key": embedded_api_key, "base_url": "https://api.openai.com/v1"}},
                 "chunker": {"backend": "sentence", "config": {"chunk_size": 512, "chunk_overlap": 128}},
             },
+        },
+        # UserManager設定（SQLiteのDB保存場所を指定）
+        "user_manager": {
+            "backend": "sqlite",
+            "config": {
+                "user_id": "root",
+                "db_path": db_path
+            }
         },
         # MemOS高度機能設定
         "max_turns_window": cocoro_config.max_turns_window,
