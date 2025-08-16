@@ -44,15 +44,13 @@ class LoggingConfig(BaseModel):
     format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     
     # ログ長制限関連
-    max_message_length: int = 1000  # デフォルト値（下位互換性）
-    truncate_marker: str = "_切り詰め"
     enable_truncation: bool = True
-    
-    # レベル別制限設定
+    truncate_marker: str = "_切り詰め"
+    max_message_length: int = 200  # デフォルト値
     level_specific_lengths: Dict[str, int] = {
         "DEBUG": 200,
         "INFO": 200,
-        "WARNING": 10000,
+        "WARNING": 300,
         "ERROR": 10000,
         "CRITICAL": 10000
     }
