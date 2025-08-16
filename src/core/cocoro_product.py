@@ -7,6 +7,7 @@ MemOS MOSProductのラッパークラス実装
 import asyncio
 import logging
 import os
+import re
 from typing import AsyncIterator, Dict, List, Optional
 from pathlib import Path
 
@@ -48,6 +49,7 @@ from memos import GeneralMemCube
 from memos.configs.mem_cube import GeneralMemCubeConfig
 
 from .config_manager import CocoroAIConfig, generate_memos_config_from_setting, get_mos_config
+from .cocoro_mos_product import CocoroMOSProduct
 
 logger = logging.getLogger(__name__)
 
@@ -70,10 +72,11 @@ class CocoroProductWrapper:
         
         logger.info(f"MOS_CUBE_PATH設定: {_cube_path}")
         
-        # MOSProduct初期化（確証：MemOS product.py仕様）
-        self.mos_product = MOSProduct(
+        # CocoroMOSProduct初期化（CocoroAI専用システムプロンプト対応）
+        self.mos_product = CocoroMOSProduct(
             default_config=mos_config,
-            max_user_instances=1  # シングルユーザー
+            max_user_instances=1,  # シングルユーザー
+            system_prompt_provider=self.get_system_prompt  # CocoroAIシステムプロンプト取得関数を渡す
         )
         
         # 画像・メッセージ生成器は後で初期化（循環参照回避）
@@ -90,9 +93,12 @@ class CocoroProductWrapper:
         self.system_prompt_path = None
         current_character = cocoro_config.current_character
         if current_character and current_character.systemPromptFilePath:
-            # UserData2ディレクトリからの相対パス
+            # UserData2/SystemPromptsディレクトリからUUID部分でマッチング
             user_data_dir = self._get_user_data_directory()
-            self.system_prompt_path = user_data_dir / current_character.systemPromptFilePath
+            self.system_prompt_path = self._find_system_prompt_file(
+                user_data_dir / "SystemPrompts", 
+                current_character.systemPromptFilePath
+            )
     
     def _get_user_data_directory(self) -> Path:
         """UserData2ディレクトリを取得（config_manager.pyと同じロジック）"""
@@ -108,6 +114,57 @@ class CocoroProductWrapper:
         
         # デフォルトは一つ上のディレクトリに作成
         return base_dir.parent / "UserData2"
+    
+    def _extract_uuid_from_filename(self, filename: str) -> Optional[str]:
+        """
+        ファイル名からUUID部分を抽出
+        
+        Args:
+            filename: ファイル名（例: "つくよみちゃん_50e3ba63-f0f1-ecd4-5a54-3812ac2cc863.txt"）
+            
+        Returns:
+            str: UUID部分（例: "50e3ba63-f0f1-ecd4-5a54-3812ac2cc863"）またはNone
+        """
+        # UUID パターン: 8-4-4-4-12 文字のハイフン区切り
+        uuid_pattern = r'([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})'
+        match = re.search(uuid_pattern, filename)
+        return match.group(1) if match else None
+    
+    def _find_system_prompt_file(self, prompts_dir: Path, target_filename: str) -> Optional[Path]:
+        """
+        UUID部分でマッチするシステムプロンプトファイルを検索
+        
+        Args:
+            prompts_dir: SystemPromptsディレクトリのパス
+            target_filename: 設定ファイルで指定されたファイル名
+            
+        Returns:
+            Path: マッチしたファイルのパスまたはNone
+        """
+        if not prompts_dir.exists():
+            logger.warning(f"SystemPromptsディレクトリが存在しません: {prompts_dir}")
+            return None
+        
+        # 設定ファイルのファイル名からUUIDを抽出
+        target_uuid = self._extract_uuid_from_filename(target_filename)
+        if not target_uuid:
+            logger.warning(f"設定ファイル名からUUIDを抽出できませんでした: {target_filename}")
+            # フォールバック: 元のファイル名で直接検索
+            fallback_path = prompts_dir / target_filename
+            if fallback_path.exists():
+                logger.info(f"フォールバック: 直接ファイル名でマッチしました: {fallback_path}")
+                return fallback_path
+            return None
+        
+        # SystemPromptsディレクトリ内の全.txtファイルを検索
+        for file_path in prompts_dir.glob("*.txt"):
+            file_uuid = self._extract_uuid_from_filename(file_path.name)
+            if file_uuid and file_uuid.lower() == target_uuid.lower():
+                logger.info(f"UUID部分でマッチしたファイルを発見: {file_path}")
+                return file_path
+        
+        logger.warning(f"UUID '{target_uuid}' にマッチするファイルが見つかりませんでした")
+        return None
     
     async def initialize(self):
         """非同期初期化処理"""
