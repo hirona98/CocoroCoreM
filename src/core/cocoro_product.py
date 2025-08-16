@@ -104,25 +104,25 @@ class CocoroProductWrapper:
     
     def _create_cube(self, character):
         """キューブ作成処理"""
-        cube_name = f"user_user_{character.memoryId}_cube"
+        cube_name = f"{character.modelName}_{character.memoryId}_cube"
         
-        # 1. GeneralMemCubeConfig作成
-        cube_config = GeneralMemCubeConfig(
-            user_id=self.current_user_id,
-            cube_id=self.current_cube_id
-        )
-        
-        # 2. GeneralMemCubeオブジェクト作成
-        mem_cube = GeneralMemCube(cube_config)
-        
-        # 3. データベースにキューブレコードを作成
+        # 1. データベースにキューブレコードを作成
         created_cube_id = self.mos_product.create_cube_for_user(
             cube_name=cube_name,
             owner_id=self.current_user_id,
             cube_id=self.current_cube_id
         )
         
-        # 4. メモリにキューブを登録
+        # 2. GeneralMemCubeConfig作成（作成されたIDを使用）
+        cube_config = GeneralMemCubeConfig(
+            user_id=self.current_user_id,
+            cube_id=self.current_cube_id
+        )
+        
+        # 3. GeneralMemCubeオブジェクト作成
+        mem_cube = GeneralMemCube(cube_config)
+        
+        # 4. メモリにキューブを登録（MemOS公式：GeneralMemCubeオブジェクト直接登録）
         # テキスト検索のためtext_memは基本必須（MemOS公式仕様）
         memory_types = ["text_mem"]
         if self.cocoro_config.enable_activation_memory:
@@ -130,7 +130,7 @@ class CocoroProductWrapper:
         
         self.mos_product.register_mem_cube(
             mem_cube_name_or_path_or_object=mem_cube,
-            mem_cube_id=created_cube_id,
+            mem_cube_id=self.current_cube_id,  # 統一したIDを使用
             user_id=self.current_user_id,
             memory_types=memory_types,
             default_config=None
