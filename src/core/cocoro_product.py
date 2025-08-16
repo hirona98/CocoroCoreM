@@ -310,6 +310,9 @@ class CocoroProductWrapper:
     ) -> AsyncIterator[str]:
         """
         完全自動記憶管理付きストリーミングチャット
+        - ストリーミング終了シグナル（"type": "end"）を検出したら即座に終了
+        - MemOSの記憶保存処理（約2秒）を待たずに応答を返す
+        - 記憶保存はMemOS内部で非同期に継続される
         
         Args:
             query: ユーザークエリ
@@ -335,6 +338,11 @@ class CocoroProductWrapper:
                 internet_search=internet_search and self.cocoro_config.enable_internet_retrieval
             ):
                 yield chunk
+                
+                # ストリーミング完了シグナルを検出したら終了
+                if '"type": "end"' in chunk:
+                    logger.info(f"ストリーミング終了シグナルを検出。早期終了します。cube_id={cube_id}")
+                    break
                 
         except Exception as e:
             logger.error(f"チャット処理エラー: {e}")
