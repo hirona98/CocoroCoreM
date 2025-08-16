@@ -12,8 +12,12 @@ from pathlib import Path
 
 # MemOSインポート前にMOS_CUBE_PATH環境変数を設定（重要）
 def _setup_mos_cube_path():
-    """MemOSのCUBE_PATHを事前設定（インポート前に実行必須）"""
-    # UserData2ディレクトリを探す
+    """MemOSのCUBE_PATHを事前設定（相対パス使用）"""
+    # 実行時の基準ディレクトリ（CocoroCore2）からの相対パス
+    # main.py実行時の作業ディレクトリが基準
+    relative_cubes_dir = "../UserData2/Memory/cubes"
+    
+    # ディレクトリを事前作成（絶対パスで）
     base_dir = Path(__file__).parent.parent
     user_data_paths = [
         base_dir.parent / "UserData2",  # CocoroCore2/../UserData2/
@@ -32,12 +36,9 @@ def _setup_mos_cube_path():
     memory_dir = user_data_dir / "Memory" / "cubes"
     memory_dir.mkdir(parents=True, exist_ok=True)
     
-    # MemOSのパス結合に合わせて末尾区切りなしで設定
-    # MemOSは f"{CUBE_PATH}/{default_cube_name}" で結合するため
-    normalized_path = str(memory_dir)
-    
-    os.environ["MOS_CUBE_PATH"] = normalized_path
-    return normalized_path
+    # MemOSには相対パスを設定（ポータブル性向上）
+    os.environ["MOS_CUBE_PATH"] = relative_cubes_dir
+    return relative_cubes_dir
 
 # MemOSインポート前にパス設定を実行
 _cube_path = _setup_mos_cube_path()
@@ -175,7 +176,10 @@ class CocoroProductWrapper:
         # 個別のキューブディレクトリを明示的に作成
         cube_path_dir = cube_data_dir / self.current_cube_id
         cube_path_dir.mkdir(parents=True, exist_ok=True)
-        cube_path = str(cube_path_dir)
+        
+        # 相対パスで保存（ポータブル性向上）
+        # 基準はmain.py実行時の作業ディレクトリ（CocoroCore2）
+        cube_path = f"../UserData2/Memory/cubes/{self.current_cube_id}"
         
         # 1. データベースにキューブレコードを作成
         created_cube_id = self.mos_product.create_cube_for_user(
