@@ -150,24 +150,90 @@ class CocoroProductWrapper:
             cube_path=cube_path
         )
         
-        # 2. GeneralMemCubeConfig作成（作成されたIDを使用）
-        cube_config = GeneralMemCubeConfig(
-            user_id=self.current_user_id,
-            cube_id=self.current_cube_id
-        )
+        # 2. MemOS標準フローに従ったキューブ初期化
         
-        # 3. GeneralMemCubeオブジェクト作成
-        mem_cube = GeneralMemCube(cube_config)
+        # 現在のキャラクター設定からAPIキーを取得
+        current_character = self.cocoro_config.current_character
+        api_key = current_character.apiKey if current_character and current_character.apiKey else ""
         
-        # 4. メモリにキューブを登録（MemOS公式：GeneralMemCubeオブジェクト直接登録）
-        # テキスト検索のためtext_memは基本必須（MemOS公式仕様）
+        # 最小限のconfig.jsonを作成（MemOSの標準フロー）
+        import json
+        
+        # Neo4j設定を取得（Community Edition対応）
+        neo4j_config = {
+            "uri": "bolt://localhost:55603",
+            "user": "neo4j", 
+            "password": "password",
+            "db_name": "neo4j",
+            "use_multi_db": False,  # Community Editionでは必須
+            "user_name": self.current_user_id,  # 論理的分離用
+            "auto_create": False,
+            "embedding_dimension": 1536  # text-embedding-3-small の次元
+        }
+        
+        config_data = {
+            "model_schema": "memos.configs.mem_cube.GeneralMemCubeConfig",
+            "user_id": self.current_user_id,
+            "cube_id": self.current_cube_id,
+            "text_mem": {
+                "backend": "tree_text",
+                "config": {
+                    "cube_id": self.current_cube_id,
+                    "extractor_llm": {
+                        "backend": "openai",
+                        "config": {
+                            "model_name_or_path": "gpt-4o-mini",
+                            "api_key": api_key,
+                            "api_base": "https://api.openai.com/v1"
+                        }
+                    },
+                    "dispatcher_llm": {
+                        "backend": "openai", 
+                        "config": {
+                            "model_name_or_path": "gpt-4o-mini",
+                            "api_key": api_key,
+                            "api_base": "https://api.openai.com/v1"
+                        }
+                    },
+                    "graph_db": {
+                        "backend": "neo4j",
+                        "config": neo4j_config
+                    },
+                    "embedder": {
+                        "backend": "universal_api",
+                        "config": {
+                            "model_name_or_path": "text-embedding-3-small",
+                            "provider": "openai",
+                            "api_key": api_key,
+                            "base_url": "https://api.openai.com/v1"
+                        }
+                    }
+                }
+            },
+            "act_mem": {
+                "backend": "uninitialized",
+                "config": {}
+            },
+            "para_mem": {
+                "backend": "uninitialized", 
+                "config": {}
+            }
+        }
+        
+        config_file_path = cube_path_dir / "config.json"
+        with open(config_file_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=2)
+        
+        # 3. MemOS標準メカニズムでキューブを登録（パス指定）
         memory_types = ["text_mem"]
         if self.cocoro_config.enable_activation_memory:
             memory_types.append("act_mem")
         
+        # MemOSの標準フローに従い、パス指定でregister_mem_cube
+        # init_from_dirが自動実行され、text_memが適切に初期化される
         self.mos_product.register_mem_cube(
-            mem_cube_name_or_path_or_object=mem_cube,
-            mem_cube_id=self.current_cube_id,  # 統一したIDを使用
+            mem_cube_name_or_path_or_object=cube_path,  # パス指定が重要
+            mem_cube_id=self.current_cube_id,
             user_id=self.current_user_id,
             memory_types=memory_types,
             default_config=None
