@@ -121,13 +121,14 @@ def setup_logging():
     logging.getLogger("neo4j.io").setLevel(logging.INFO)
     logging.getLogger("neo4j.pool").setLevel(logging.INFO)
     logging.getLogger("neo4j.notifications").setLevel(logging.WARNING)
-    
+
     # httpログレベル設定
     logging.getLogger("httpcore.http11").setLevel(logging.INFO)
     logging.getLogger("httpcore.connection").setLevel(logging.WARNING)
     logging.getLogger("openai").setLevel(logging.INFO)
     
     # MemOSのログレベル設定
+    logging.getLogger("memos.utils").setLevel(logging.INFO)
     logging.getLogger("memos.llms.openai").setLevel(logging.WARNING)
     logging.getLogger("memos.memories.textual.tree_text_memory.retrieve.searcher").setLevel(logging.ERROR)
 
@@ -140,6 +141,7 @@ from utils.neo4j_manager import Neo4jManager
 from api.health import router as health_router
 from api.control import router as control_router
 from api.chat import router as chat_router
+from api.websocket_chat import router as websocket_router
 
 
 class CocoroCore2App:
@@ -220,6 +222,7 @@ class CocoroCore2App:
             self.app.include_router(health_router)
             self.app.include_router(control_router)
             self.app.include_router(chat_router)
+            self.app.include_router(websocket_router)
             
             # FastAPIのstate経由でアプリケーションインスタンスを保存
             self.app.state.core_app = self
@@ -333,6 +336,15 @@ class CocoroCore2App:
         """リソースクリーンアップ処理"""
         try:
             logger.info("リソースクリーンアップを開始...")
+            
+            # WebSocketマネージャー停止
+            try:
+                from api.websocket_chat import get_websocket_manager
+                websocket_manager = get_websocket_manager()
+                websocket_manager.shutdown()
+                logger.info("WebSocketマネージャー停止完了")
+            except Exception as e:
+                logger.warning(f"WebSocketマネージャー停止エラー: {e}")
             
             # MOSProduct停止
             if self.cocoro_product:
