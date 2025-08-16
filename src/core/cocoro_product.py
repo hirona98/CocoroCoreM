@@ -6,8 +6,41 @@ MemOS MOSProductのラッパークラス実装
 
 import asyncio
 import logging
+import os
 from typing import AsyncIterator, Dict, List, Optional
 from pathlib import Path
+
+# MemOSインポート前にMOS_CUBE_PATH環境変数を設定（重要）
+def _setup_mos_cube_path():
+    """MemOSのCUBE_PATHを事前設定（インポート前に実行必須）"""
+    # UserData2ディレクトリを探す
+    base_dir = Path(__file__).parent.parent
+    user_data_paths = [
+        base_dir.parent / "UserData2",  # CocoroCore2/../UserData2/
+        base_dir.parent.parent / "UserData2",  # CocoroAI/UserData2/
+    ]
+    
+    user_data_dir = None
+    for path in user_data_paths:
+        if path.exists():
+            user_data_dir = path
+            break
+    
+    if user_data_dir is None:
+        user_data_dir = base_dir.parent / "UserData2"
+    
+    memory_dir = user_data_dir / "Memory" / "cubes"
+    memory_dir.mkdir(parents=True, exist_ok=True)
+    
+    # MemOSのパス結合に合わせて末尾区切りなしで設定
+    # MemOSは f"{CUBE_PATH}/{default_cube_name}" で結合するため
+    normalized_path = str(memory_dir)
+    
+    os.environ["MOS_CUBE_PATH"] = normalized_path
+    return normalized_path
+
+# MemOSインポート前にパス設定を実行
+_cube_path = _setup_mos_cube_path()
 
 from memos.mem_os.product import MOSProduct
 from memos import GeneralMemCube
@@ -34,6 +67,8 @@ class CocoroProductWrapper:
         # MOSConfig動的生成（確証：config.py実装済み）
         mos_config = get_mos_config(cocoro_config)
         
+        logger.info(f"MOS_CUBE_PATH設定: {_cube_path}")
+        
         # MOSProduct初期化（確証：MemOS product.py仕様）
         self.mos_product = MOSProduct(
             default_config=mos_config,
@@ -55,8 +90,23 @@ class CocoroProductWrapper:
         current_character = cocoro_config.current_character
         if current_character and current_character.systemPromptFilePath:
             # UserData2ディレクトリからの相対パス
-            base_dir = Path(__file__).parent.parent.parent / "UserData2"
-            self.system_prompt_path = base_dir / current_character.systemPromptFilePath
+            user_data_dir = self._get_user_data_directory()
+            self.system_prompt_path = user_data_dir / current_character.systemPromptFilePath
+    
+    def _get_user_data_directory(self) -> Path:
+        """UserData2ディレクトリを取得（config_manager.pyと同じロジック）"""
+        base_dir = Path(__file__).parent.parent
+        user_data_paths = [
+            base_dir.parent / "UserData2",  # CocoroCore2/../UserData2/
+            base_dir.parent.parent / "UserData2",  # CocoroAI/UserData2/
+        ]
+        
+        for path in user_data_paths:
+            if path.exists():
+                return path
+        
+        # デフォルトは一つ上のディレクトリに作成
+        return base_dir.parent / "UserData2"
     
     async def initialize(self):
         """非同期初期化処理"""
@@ -115,22 +165,7 @@ class CocoroProductWrapper:
         cube_name = f"{character.modelName}_{character.memoryId}_cube"
         
         # setting.jsonと同じUserData2ディレクトリにキューブデータを保存
-        # config_manager.pyと同じロジックでUserData2を探す
-        base_dir = Path(__file__).parent.parent
-        user_data_paths = [
-            base_dir.parent / "UserData2",  # CocoroCore2/../UserData2/
-            base_dir.parent.parent / "UserData2",  # CocoroAI/UserData2/
-        ]
-        
-        user_data_dir = None
-        for path in user_data_paths:
-            if path.exists():
-                user_data_dir = path
-                break
-        
-        if user_data_dir is None:
-            # デフォルトは一つ上のディレクトリに作成
-            user_data_dir = base_dir.parent / "UserData2"
+        user_data_dir = self._get_user_data_directory()
         
         # Memory ディレクトリ下にキューブデータを保存
         memory_dir = user_data_dir / "Memory"
