@@ -179,6 +179,12 @@ class CocoroProductWrapper:
             # 現在のキャラクターのMemCubeを作成・設定
             self._setup_current_character_cube()
             
+            # トークナイザーを無効化して文字ベースチャンクに切り替え（UTF-8文字化け対策）
+            if hasattr(self.mos_product, 'tokenizer'):
+                logger.info(f"トークナイザーを無効化（UTF-8文字化け対策）: {self.mos_product.tokenizer is not None}")
+                self.mos_product.tokenizer = None
+                logger.info("文字ベースチャンクに切り替え完了")
+            
             logger.info(f"CocoroProductWrapper初期化完了: ユーザー={self.current_user_id}")
             
         except Exception as e:
