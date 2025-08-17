@@ -16,19 +16,13 @@ from typing import Dict, Optional, Any
 from fastapi import WebSocket, WebSocketDisconnect, Depends, APIRouter
 from pydantic import BaseModel
 
+from models.api_models import NotificationData, DesktopContext, ChatRequest, ImageData
 from utils.image_processor import generate_image_description, format_image_context_for_chat
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ws", tags=["websocket"])
 
 
-class ChatRequest(BaseModel):
-    """WebSocketチャットリクエスト"""
-    query: str
-    chat_type: str = "text"  # "text", "text_image", "notification", "desktop_watch"
-    images: Optional[list] = None
-    history: Optional[list] = None
-    internet_search: bool = False
 
 
 class WebSocketMessage(BaseModel):
@@ -219,8 +213,8 @@ class WebSocketChatManager:
         self.active_sessions[session_id] = session_info
         
         try:
-            # 画像処理（MOSProduct処理の前に実行）
-            enhanced_query = await self._process_images_and_build_query(request_data, app)
+            # 通知などにプロンプト追加処理
+            enhanced_query = await self._build_enhanced_query(request_data, app)
             
             # メインループのイベントループを取得
             main_loop = asyncio.get_event_loop()
@@ -353,46 +347,116 @@ class WebSocketChatManager:
             if session_info.get("task") and not session_info["task"].done():
                 session_info["task"].cancel()
     
-    async def _process_images_and_build_query(self, request_data: dict, app) -> str:
+    async def _build_enhanced_query(self, request_data: dict, app) -> str:
         """画像処理と拡張クエリ構築（非同期）"""
         base_query = request_data.get("query", "")
         chat_type = request_data.get("chat_type", "text")
+        images = request_data.get("images")
         
-        # 通知コンテキスト追加
-        if chat_type == "notification" and request_data.get("notification"):
-            notification = request_data["notification"]
-            base_query = f"【{notification.get('original_source')}からの通知】{notification.get('original_message')}\n\n{base_query}"
-        
-        # デスクトップ監視コンテキスト追加  
-        elif chat_type == "desktop_watch" and request_data.get("desktop_context"):
-            desktop_context = request_data["desktop_context"]
-            base_query = f"【デスクトップ監視】{desktop_context.get('application')}で作業中\nウィンドウタイトル: {desktop_context.get('window_title')}\n\n{base_query}"
-        
-        # 画像処理
-        elif chat_type == "text_image" and request_data.get("images"):
+        # 画像処理が必要な場合
+        if images:
             try:
-                images = request_data["images"]
                 logger.info(f"画像処理開始: {len(images)}枚の画像")
                 
                 # 画像説明を生成（MemOSを使わずに直接LLM呼び出し）
                 image_description = await generate_image_description(images, app.cocoro_product.cocoro_config)
                 
                 if image_description:
-                    # 画像説明とユーザーメッセージを結合
-                    enhanced_query = format_image_context_for_chat(image_description, base_query)
-                    logger.info(f"画像処理完了: 説明生成成功")
-                    return enhanced_query
+                    # 画像付き通知の場合
+                    if chat_type == "notification":
+                        notification = request_data.get("notification", {})
+                        source = notification.get('original_source', '不明なアプリ')
+                        original_msg = notification.get('original_message', '')
+                        
+                        enhanced_query = self._build_notification_with_image_prompt(
+                            source, original_msg, image_description
+                        )
+                        logger.info(f"画像付き通知処理完了: 説明生成成功")
+                        return enhanced_query
+                    
+                    # 画像付きチャット
+                    else:
+                        enhanced_query = format_image_context_for_chat(image_description, base_query)
+                        logger.info(f"画像処理完了: 説明生成成功")
+                        return enhanced_query
                 else:
+                    # 画像説明生成失敗時
                     logger.warning("画像説明の生成に失敗しました。テキストのみで処理を継続します。")
-                    return f"{base_query}\n\n【画像情報】\n{len(images)}枚の画像が添付されていますが、画像の分析に失敗しました。"
+                    return await self._handle_image_processing_error(
+                        request_data, chat_type, base_query, app,
+                        f"\n\n【画像情報】\n{len(images)}枚の画像が添付されていますが、画像の分析に失敗しました。"
+                    )
                     
             except Exception as e:
                 logger.error(f"画像処理エラー: {e}")
-                return f"{base_query}\n\n【画像情報】\n{len(request_data.get('images', []))}枚の画像が添付されていますが、画像の分析でエラーが発生しました。"
+                return await self._handle_image_processing_error(
+                    request_data, chat_type, base_query, app,
+                    f"\n\n【画像情報】\n{len(images)}枚の画像が添付されていますが、画像の分析でエラーが発生しました。"
+                )
+        
+        # 画像なし通知の場合
+        if chat_type == "notification" and request_data.get("notification"):
+            notification = request_data["notification"]
+            source = notification.get('original_source', '不明なアプリ')
+            original_msg = notification.get('original_message', '')
+            
+            # 画像なし通知：直接プロンプト構築
+            return self._build_notification_prompt(source, original_msg)
+        
+        # デスクトップ監視の場合
+        if chat_type == "desktop_watch" and request_data.get("desktop_context"):
+            desktop_context = request_data["desktop_context"]
+            app_name = desktop_context.get('application', '不明')
+            window_title = desktop_context.get('window_title', '')
+            base_query = f"【デスクトップ監視】{app_name}で作業中\nウィンドウタイトル: {window_title}\n\n{base_query}"
         
         return base_query
     
+    async def _handle_image_processing_error(self, request_data: dict, chat_type: str, base_query: str, app, error_msg: str) -> str:
+        """画像処理エラー時の処理を共通化"""
+        if chat_type == "notification":
+            notification = request_data.get("notification", {})
+            source = notification.get('original_source', '不明なアプリ')
+            original_msg = notification.get('original_message', '')
+            return self._build_notification_prompt(source, original_msg) + error_msg
+        
+        return base_query + error_msg
     
+    def _build_notification_prompt(self, notification_source: str, original_message: str) -> str:
+        """通知用独り言プロンプトを構築"""
+        return (
+            f"{notification_source}からの通知です。\n\n"
+            f"通知内容: {original_message}\n\n"
+            "以下の形式で、あなたの**キャラクター性を活かして**ユーザーに伝えてください：\n"
+            "- 通知元と通知内容を含める\n"
+            "- 最後に感想や意見を加える\n"
+            "- 質問形式にしない\n"
+            "- 2～3文で完結させる\n\n"
+            "例：\n"
+            " LINEでメッセージが来たよ。返事しなきゃね。\n"
+            " Slackから会議の通知がありました。準備しましょう。\n"
+            " Twitterで誰かがリプライしてる。何かなぁ。"
+        )
+
+    def _build_notification_with_image_prompt(self, notification_source: str, original_message: str, image_description: str) -> str:
+        """画像付き通知用独り言プロンプトを構築"""
+        return (
+            f"{notification_source}からの通知で、画像が含まれています。\n\n"
+            f"通知内容: {original_message}\n"
+            f"画像内容: {image_description}\n\n"
+            "以下の形式で、あなたの**キャラクター性を自然に活かして**ユーザーに伝えてください：\n"
+            "- 通知元と通知内容を含める\n"
+            "- 画像の内容についても軽く触れる（複数枚ある場合は総括して触れる）\n"
+            "- 最後に感想や意見を加える\n"
+            "- 質問形式にしない\n"
+            "- 2～3文で完結させる\n\n"
+            "例：\n"
+            " LINEから写真が送られてきたよ。美味しそうな料理だね。\n"
+            " Slackからプロジェクトの進捗報告がありました。順調そうで良かったですね。\n"
+            " Twitterのトレンド通知で桜の写真が来てる。もう春なんだなぁ。"
+        )
+
+
     def _convert_sse_to_websocket(self, sse_chunk: str, session_id: str) -> Optional[dict]:
         """SSE形式をWebSocketメッセージに変換"""
         if not sse_chunk.startswith("data: "):

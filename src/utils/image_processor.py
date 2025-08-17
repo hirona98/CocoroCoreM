@@ -111,7 +111,7 @@ def format_image_context_for_chat(image_description: str, user_query: str) -> st
         user_query: ユーザーのメッセージ
         
     Returns:
-        結合されたチャット用テキスト（画像先行フォーマット）
+        結合されたチャット用テキスト
     """
     if not image_description:
         return user_query

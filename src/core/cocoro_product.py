@@ -55,7 +55,7 @@ logger = logging.getLogger(__name__)
 
 
 class CocoroProductWrapper:
-    """MOSProductのラッパークラス（確証：参考コード設計）"""
+    """MOSProductのラッパークラス"""
     
     def __init__(self, cocoro_config: CocoroAIConfig):
         """
