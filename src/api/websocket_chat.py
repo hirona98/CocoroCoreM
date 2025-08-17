@@ -7,6 +7,7 @@ WebSocket最適化されたリアルタイムチャット機能
 import asyncio
 import json
 import logging
+import re
 import uuid
 from asyncio import Queue
 from concurrent.futures import ThreadPoolExecutor
@@ -127,6 +128,78 @@ class WebSocketChatManager:
             logger.warning(f"UTF-8修復エラー: chunk#{chunk_number}, {e}")
             return sse_chunk
     
+    def _find_last_sentence_boundary(self, buffer: str) -> int:
+        """80文字以上のバッファで最後の句読点位置を探す"""
+        if len(buffer) < 80:
+            return -1
+        
+        # 日本語文字が含まれているかチェック
+        has_japanese = bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', buffer))
+        
+        if has_japanese:
+            # 日本語文書：主要な句読点のみ
+            sentence_endings = re.compile(r'[。？．\n]')
+        else:
+            # 英語文書：ピリオドと改行のみ
+            sentence_endings = re.compile(r'[.\n]')
+        
+        # バッファ全体で最後の句読点を探す
+        matches = list(sentence_endings.finditer(buffer))
+        if not matches:
+            return -1
+        
+        # 最後の句読点位置を返す（80文字以上の場合のみ）
+        last_match = matches[-1]
+        return last_match.end()
+    
+    async def _flush_text_buffer(self, session_info: dict, websocket: WebSocket, session_id: str, force: bool = False):
+        """テキストバッファの内容を送信"""
+        buffer = session_info.get("text_buffer", "")
+        if not buffer:
+            return
+        
+        if force:
+            # 強制送信：バッファ全体を送信
+            send_content = buffer
+            remaining_buffer = ""
+        else:
+            # 通常送信：適切な句読点位置を探す
+            boundary_pos = self._find_last_sentence_boundary(buffer)
+            if boundary_pos == -1:
+                # 送信条件を満たさない
+                return
+            
+            # 句読点位置まで送信、残りはバッファに保持
+            send_content = buffer[:boundary_pos]
+            remaining_buffer = buffer[boundary_pos:]
+        
+        if send_content:
+            # バッファの内容を送信
+            ws_message = {
+                "session_id": session_id,
+                "type": "text",
+                "data": {
+                    "content": send_content,
+                    "is_incremental": True
+                }
+            }
+            
+            try:
+                await websocket.send_json(ws_message)
+                
+                # 送信内容をログ表示
+                logger.info(f"[WebSocket送信] 文字数={len(send_content)}, 残り={len(remaining_buffer)}, force={force}")
+                logger.info(f"[送信内容] {send_content}")
+                if remaining_buffer:
+                    logger.info(f"[残りバッファ] {remaining_buffer}")
+                
+                # バッファを更新
+                session_info["text_buffer"] = remaining_buffer
+                session_info["last_send_time"] = asyncio.get_event_loop().time()
+                
+            except Exception as e:
+                logger.error(f"バッファ送信エラー: {e}")
+    
     async def handle_message(self, client_id: str, message: dict, app):
         """WebSocketメッセージ処理"""
         websocket = self.active_connections.get(client_id)
@@ -171,7 +244,9 @@ class WebSocketChatManager:
         session_info = {
             "queue": session_queue,
             "active": True,
-            "task": None
+            "task": None,
+            "text_buffer": "",  # テキストバッファリング用
+            "last_send_time": asyncio.get_event_loop().time()  # 送信タイムアウト用
         }
         self.active_sessions[session_id] = session_info
         
@@ -245,8 +320,10 @@ class WebSocketChatManager:
             # 別スレッドでMOSProduct処理開始
             session_info["task"] = self.executor.submit(mos_product_worker)
             
-            # 軽量プロキシ：キューからの読み取りとWebSocket送信
+            # 軽量プロキシ：キューからの読み取りとバッファリング送信
             sent_count = 0
+            buffer_timeout = 2.0  # バッファタイムアウト（秒）
+            
             while session_info["active"]:
                 try:
                     # キューから取得（タイムアウト付き）
@@ -254,17 +331,47 @@ class WebSocketChatManager:
                     
                     if sse_chunk is None:  # 終了シグナル
                         logger.info(f"終了シグナル受信: session_id={session_id}")
+                        # 残りバッファを強制送信
+                        await self._flush_text_buffer(session_info, websocket, session_id, force=True)
                         break
                     
-                    # WebSocketメッセージに変換して送信
+                    # WebSocketメッセージに変換
                     ws_message = self._convert_sse_to_websocket(sse_chunk, session_id)
-                    if ws_message:
+                    if not ws_message:
+                        continue
+                    
+                    message_type = ws_message.get("type")
+                    
+                    if message_type == "text":
+                        # textタイプはバッファに蓄積
+                        content = ws_message.get("data", {}).get("content", "")
+                        session_info["text_buffer"] += content
+                        
+                        # バッファ送信判定
+                        await self._flush_text_buffer(session_info, websocket, session_id)
+                        
+                    elif message_type == "end":
+                        # 終了時は残りバッファを強制送信してからendを送信
+                        await self._flush_text_buffer(session_info, websocket, session_id, force=True)
                         await websocket.send_json(ws_message)
+                        logger.info(f"[WebSocket送信] {message_type}タイプ: {ws_message.get('data', {})}")
+                        sent_count += 1
+                        
+                    else:
+                        # 非textタイプ（status, reference, time, error等）は即座に送信
+                        await websocket.send_json(ws_message)
+                        logger.info(f"[WebSocket送信] {message_type}タイプ: {ws_message.get('data', {})}")
                         sent_count += 1
                         
                 except asyncio.TimeoutError:
-                    # タイムアウト時は継続（keep-alive不要）
+                    # タイムアウト時：バッファタイムアウトチェック
+                    current_time = asyncio.get_event_loop().time()
+                    if (session_info["text_buffer"] and 
+                        current_time - session_info["last_send_time"] > buffer_timeout):
+                        logger.debug(f"バッファタイムアウト: {buffer_timeout}秒経過")
+                        await self._flush_text_buffer(session_info, websocket, session_id, force=True)
                     continue
+                    
                 except Exception as e:
                     logger.error(f"プロキシ処理エラー: {e}")
                     break
@@ -362,7 +469,7 @@ class WebSocketChatManager:
             return message
             
         except json.JSONDecodeError as e:
-            logger.warning(f"JSON解析エラー: {e}, chunk: {sse_chunk[:100]}")
+            logger.warning(f"JSON解析エラー: {e}, chunk: {sse_chunk}")
             return None
     
     async def _send_error(self, websocket: WebSocket, session_id: Optional[str], error_message: str):
