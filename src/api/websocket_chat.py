@@ -361,7 +361,7 @@ class WebSocketChatManager:
         # 通知コンテキスト追加
         if chat_type == "notification" and request_data.get("notification"):
             notification = request_data["notification"]
-            base_query = f"【{notification.get('from_')}からの通知】{notification.get('original_message')}\n\n{base_query}"
+            base_query = f"【{notification.get('original_source')}からの通知】{notification.get('original_message')}\n\n{base_query}"
         
         # デスクトップ監視コンテキスト追加  
         elif chat_type == "desktop_watch" and request_data.get("desktop_context"):

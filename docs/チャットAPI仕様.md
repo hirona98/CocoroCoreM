@@ -61,7 +61,7 @@ interface ImageData {
 }
 
 interface NotificationData {
-  from: string;                     // 通知送信元（必須）
+  original_source: string;                    // 通知送信元（必須）
   original_message: string;         // 元の通知メッセージ（必須）
 }
 
@@ -79,10 +79,6 @@ interface HistoryMessage {
 }
 ```
 
-**注意**: 
-- 通知機能とデスクトップウォッチ機能は、chat_typeで識別され、適切なコンテキスト情報が自動的にクエリに統合されます
-- 画像分析機能は現在実装予定（基本的なBase64データ処理のみ対応）
-- notification、desktop_contextフィールドは実装済みでコンテキスト統合に使用されます
 
 ##### 受信メッセージ（サーバー→クライアント）
 
@@ -206,13 +202,10 @@ interface ErrorMessage {
 
 **処理フロー**:
 1. **画像データ受信**: Base64 data URL形式の画像データを受信
-2. **コンテキスト統合**: 画像枚数情報をクエリに追加（「○枚の画像が添付されています（分析機能は実装予定）」）
-3. **MOSProduct処理**: 基本的なテキストチャットとしてCocoroMOSProduct.chat_with_references()で処理
-4. **結果配信**: WebSocketストリーミング配信
-
-**現在の制限**:
-- 画像内容分析は未実装（Vision LLMによる画像理解は実装予定）
-- 画像データは受信・保持されるが、実際の画像理解処理は行われない
+2. **画像分析**: 画像対応LLMで画像説明を生成
+3. **コンテキスト統合**: 生成された画像説明とユーザークエリを統合
+4. **MOSProduct処理**: 統合されたクエリでCocoroMOSProduct.chat_with_references()処理
+5. **結果配信**: WebSocketストリーミング配信
 
 ### 3. 通知機能
 
@@ -227,7 +220,7 @@ interface ErrorMessage {
     "query": "写真が送信されました",
     "chat_type": "notification",
     "notification": {
-      "from": "LINE",
+      "original_source": "LINE",
       "original_message": "田中さんから写真が届きました"
     },
     "images": [/* 画像データ */]
@@ -236,7 +229,7 @@ interface ErrorMessage {
 ```
 
 **処理フロー**:
-1. **コンテキスト統合**: 通知データを自動的にクエリに統合（例：「【LINEからの通知】田中さんから写真が届きました\n\n写真が送信されました」）
+1. **コンテキスト統合**: 通知データを自動的にクエリに統合（例：「【LINEからの通知】田中さんから写真が届きました\n\n写真が送信されました」） # TODO:
 2. **MOSProduct処理**: 統合されたクエリでCocoroMOSProduct.chat_with_references()処理
 3. **独り言生成**: キャラクター性を活かした独り言形式の応答生成
 4. **応答配信**: WebSocketストリーミング配信
@@ -272,16 +265,13 @@ interface ErrorMessage {
 3. **独り言生成**: キャラクター性を活かした独り言形式の応答
 4. **応答配信**: WebSocketストリーミング配信
 
-**実装状況**: 
-- デスクトップコンテキストの自動統合機能は実装済み
-- 画像分析機能は実装予定（現在は基本的な画像データ受信のみ）
 
 ## 技術実装詳細
 
 ### WebSocket接続
 
 - **エンドポイント**: `ws://localhost:{port}/ws/chat/{client_id}`
-- **client_id**: 一意なクライアント識別子（例: `dock_HOSTNAME_timestamp`）
+- **client_id**: 一意なクライアント識別子（例: `dock_timestamp`）
 - **接続ライフサイクル**: 接続後、複数セッションの並行処理が可能
 
 ### セッション管理
@@ -298,27 +288,6 @@ interface ErrorMessage {
 4. **処理開始**: ThreadPoolExecutorで別スレッドでCocoroMOSProduct.chat_with_references()実行
 5. **ストリーミング**: SSE形式からWebSocket形式に変換、バッファリング処理
 6. **終了**: "end"メッセージで完了通知、早期終了によるレスポンス高速化
-
-### パフォーマンス特徴
-
-- **ThreadPoolExecutor**: 最大4ワーカーでCocoroMOSProduct処理
-- **asyncio.Queue**: スレッド間の安全な通信
-- **変換処理**: SSE→WebSocket形式の軽量変換
-- **タイムアウト**: 各操作に適切なタイムアウト設定
-
-### 高度な処理機能
-
-#### テキストバッファリング
-- **80文字閾値**: バッファが80文字以上になると句読点境界で自動送信
-- **句読点検出**: 日本語（。？．改行）、英語（．改行）に対応
-- **タイムアウト送信**: 2秒間新しい内容がない場合は強制送信
-- **漸進的配信**: ユーザーエクスペリエンス向上のため適切なタイミングで配信
-
-
-#### セッション管理
-- **並行処理**: 複数セッションの同時処理をサポート
-- **非ブロッキング**: 長時間処理でも他のリクエストをブロックしない
-- **リソース管理**: セッション終了時の適切なクリーンアップ
 
 ## 使用例
 
@@ -371,20 +340,6 @@ interface ErrorMessage {
 }
 ```
 
-### 一般的なエラー
-
-- **接続エラー**: アプリケーション初期化失敗
-- **処理エラー**: MOSProduct処理中の例外
-- **形式エラー**: 不正なリクエスト形式
-- **タイムアウト**: 処理時間超過
-
-## 互換性情報
-
-- **旧SSE API**: 完全に削除済み、WebSocketのみサポート
-- **CocoroDock**: WebSocketクライアント実装済み
-- **CocoroMOSProduct**: CocoroAI専用のシステムプロンプト統合済みMOSProductクラスを活用
-- **MemOS統合**: Neo4j組み込みサービス、TreeTextMemory、Internet Retrieval機能フル対応
-- **画像処理**: Vision LLM統合は実装予定（現在は基本的なデータ受信のみ）
 
 ## MemOS統合詳細
 

@@ -78,7 +78,7 @@ class ImageData(BaseModel):
 
 class NotificationData(BaseModel):
     """通知データ"""
-    from_: str = Field(..., alias="from", description="通知送信元")
+    original_source: str = Field(..., alias="from", description="通知送信元")
     original_message: str = Field(..., description="元の通知メッセージ")
 
 
