@@ -179,9 +179,9 @@ class CocoroProductWrapper:
             # 現在のキャラクターのMemCubeを作成・設定
             self._setup_current_character_cube()
             
-            # トークナイザーを無効化して文字ベースチャンクに切り替え（UTF-8文字化け対策）
+            # トークナイザーを無効化して文字ベースチャンクに切り替え（パフォーマンス最適化）
             if hasattr(self.mos_product, 'tokenizer'):
-                logger.info(f"トークナイザーを無効化（UTF-8文字化け対策）: {self.mos_product.tokenizer is not None}")
+                logger.info(f"トークナイザーを無効化（パフォーマンス最適化）: {self.mos_product.tokenizer is not None}")
                 self.mos_product.tokenizer = None
                 logger.info("文字ベースチャンクに切り替え完了")
             

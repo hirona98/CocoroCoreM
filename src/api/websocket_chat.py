@@ -93,40 +93,6 @@ class WebSocketChatManager:
         except Exception as e:
             logger.debug(f"デバッグ出力エラー: {e}")
     
-    def _fix_utf8_chunk(self, sse_chunk: str, chunk_number: int) -> str:
-        """UTF-8文字化け修復処理（トークン境界による破損対応）"""
-        try:
-            # SSE形式チェック
-            if not sse_chunk.startswith("data: "):
-                return sse_chunk
-            
-            # JSON解析
-            json_str = sse_chunk[6:].strip()
-            if not json_str or json_str == "[DONE]":
-                return sse_chunk
-            
-            chunk_data = json.loads(json_str)
-            
-            # textタイプのみ処理
-            if chunk_data.get("type") != "text":
-                return sse_chunk
-            
-            content = chunk_data.get("data", "")
-            if not content or "�" not in content:
-                return sse_chunk
-            
-            # 文字化け修復
-            fixed_content = content.replace("�", "")
-            logger.warning(f"UTF-8文字化け修復: chunk#{chunk_number} '{content}' -> '{fixed_content}'")
-            
-            # 修復後のチャンクを再構築
-            chunk_data["data"] = fixed_content
-            fixed_json = json.dumps(chunk_data, ensure_ascii=False)
-            return f"data: {fixed_json}\n\n"
-            
-        except Exception as e:
-            logger.warning(f"UTF-8修復エラー: chunk#{chunk_number}, {e}")
-            return sse_chunk
     
     def _find_last_sentence_boundary(self, buffer: str) -> int:
         """80文字以上のバッファで最後の句読点位置を探す"""
@@ -275,16 +241,13 @@ class WebSocketChatManager:
                     ):
                         chunk_count += 1
                         
-                        # デバッグ出力とUTF-8修復処理
+                        # デバッグ出力
                         self._log_chunk_debug(sse_chunk, chunk_count)
-                        
-                        # UTF-8文字化け修復処理
-                        fixed_chunk = self._fix_utf8_chunk(sse_chunk, chunk_count)
                         
                         # キューに結果を追加（完全非同期）
                         try:
                             asyncio.run_coroutine_threadsafe(
-                                session_queue.put(fixed_chunk),
+                                session_queue.put(sse_chunk),
                                 main_loop
                             )
                         except Exception as queue_error:
