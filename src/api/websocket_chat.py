@@ -16,6 +16,8 @@ from typing import Dict, Optional, Any
 from fastapi import WebSocket, WebSocketDisconnect, Depends, APIRouter
 from pydantic import BaseModel
 
+from utils.image_processor import generate_image_description, format_image_context_for_chat
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ws", tags=["websocket"])
 
@@ -84,9 +86,9 @@ class WebSocketChatManager:
             
             if chunk_type == "text":
                 content = chunk_info.get("data", "")
-                logger.info(f"[MOSProduct] チャンク{chunk_count}: {content}")
+                logger.debug(f"[MOSProduct] チャンク{chunk_count}: {content}")
             elif chunk_type == "end":
-                logger.info(f"[MOSProduct] 処理完了: チャンク数={chunk_count}")
+                logger.debug(f"[MOSProduct] 処理完了: チャンク数={chunk_count}")
             else:
                 logger.debug(f"[MOSProduct] {chunk_type}: {json_data}")
                 
@@ -154,10 +156,10 @@ class WebSocketChatManager:
                 await websocket.send_json(ws_message)
                 
                 # 送信内容をログ表示
-                logger.info(f"[WebSocket送信] 文字数={len(send_content)}, 残り={len(remaining_buffer)}, force={force}")
+                logger.debug(f"[WebSocket送信] 文字数={len(send_content)}, 残り={len(remaining_buffer)}, force={force}")
                 logger.info(f"[送信内容] {send_content}")
                 if remaining_buffer:
-                    logger.info(f"[残りバッファ] {remaining_buffer}")
+                    logger.debug(f"[残りバッファ] {remaining_buffer}")
                 
                 # バッファを更新
                 session_info["text_buffer"] = remaining_buffer
@@ -217,6 +219,9 @@ class WebSocketChatManager:
         self.active_sessions[session_id] = session_info
         
         try:
+            # 画像処理（MOSProduct処理の前に実行）
+            enhanced_query = await self._process_images_and_build_query(request_data, app)
+            
             # メインループのイベントループを取得
             main_loop = asyncio.get_event_loop()
             
@@ -224,8 +229,6 @@ class WebSocketChatManager:
             def mos_product_worker():
                 """別スレッドでMOSProduct処理（完全にブロッキング分離）"""
                 try:
-                    # 拡張クエリ構築
-                    enhanced_query = self._build_enhanced_query(request_data)
                     cube_id = app.cocoro_product.get_current_cube_id()
                     
                     logger.info(f"MOSProduct処理開始: session_id={session_id}, cube_id={cube_id}")
@@ -317,13 +320,13 @@ class WebSocketChatManager:
                         # 終了時は残りバッファを強制送信してからendを送信
                         await self._flush_text_buffer(session_info, websocket, session_id, force=True)
                         await websocket.send_json(ws_message)
-                        logger.info(f"[WebSocket送信] {message_type}タイプ: {ws_message.get('data', {})}")
+                        logger.debug(f"[WebSocket送信] {message_type}タイプ: {ws_message.get('data', {})}")
                         sent_count += 1
                         
                     else:
                         # 非textタイプ（status, reference, time, error等）は即座に送信
                         await websocket.send_json(ws_message)
-                        logger.info(f"[WebSocket送信] {message_type}タイプ: {ws_message.get('data', {})}")
+                        logger.debug(f"[WebSocket送信] {message_type}タイプ: {ws_message.get('data', {})}")
                         sent_count += 1
                         
                 except asyncio.TimeoutError:
@@ -350,8 +353,8 @@ class WebSocketChatManager:
             if session_info.get("task") and not session_info["task"].done():
                 session_info["task"].cancel()
     
-    def _build_enhanced_query(self, request_data: dict) -> str:
-        """拡張クエリ構築（既存のchat.pyロジックを流用）"""
+    async def _process_images_and_build_query(self, request_data: dict, app) -> str:
+        """画像処理と拡張クエリ構築（非同期）"""
         base_query = request_data.get("query", "")
         chat_type = request_data.get("chat_type", "text")
         
@@ -365,12 +368,30 @@ class WebSocketChatManager:
             desktop_context = request_data["desktop_context"]
             base_query = f"【デスクトップ監視】{desktop_context.get('application')}で作業中\nウィンドウタイトル: {desktop_context.get('window_title')}\n\n{base_query}"
         
-        # 画像分析結果追加（将来の実装用）
-        if chat_type == "text_image" and request_data.get("images"):
-            image_count = len(request_data["images"])
-            base_query = f"{base_query}\n\n【画像情報】\n{image_count}枚の画像が添付されています（分析機能は実装予定）"
+        # 画像処理
+        elif chat_type == "text_image" and request_data.get("images"):
+            try:
+                images = request_data["images"]
+                logger.info(f"画像処理開始: {len(images)}枚の画像")
+                
+                # 画像説明を生成（MemOSを使わずに直接LLM呼び出し）
+                image_description = await generate_image_description(images, app.cocoro_product.cocoro_config)
+                
+                if image_description:
+                    # 画像説明とユーザーメッセージを結合
+                    enhanced_query = format_image_context_for_chat(image_description, base_query)
+                    logger.info(f"画像処理完了: 説明生成成功")
+                    return enhanced_query
+                else:
+                    logger.warning("画像説明の生成に失敗しました。テキストのみで処理を継続します。")
+                    return f"{base_query}\n\n【画像情報】\n{len(images)}枚の画像が添付されていますが、画像の分析に失敗しました。"
+                    
+            except Exception as e:
+                logger.error(f"画像処理エラー: {e}")
+                return f"{base_query}\n\n【画像情報】\n{len(request_data.get('images', []))}枚の画像が添付されていますが、画像の分析でエラーが発生しました。"
         
         return base_query
+    
     
     def _convert_sse_to_websocket(self, sse_chunk: str, session_id: str) -> Optional[dict]:
         """SSE形式をWebSocketメッセージに変換"""
