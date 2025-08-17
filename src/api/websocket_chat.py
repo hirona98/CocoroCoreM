@@ -193,7 +193,7 @@ class WebSocketChatManager:
         
         request_data = message.get("request", {})
         
-        logger.info(f"チャット開始: session_id={session_id}, query={request_data.get('query', '')[:50]}...")
+        logger.info(f"チャット開始: session_id={session_id}, query={request_data.get('query', '')}")
         
         # 既存の同一セッションがあれば停止
         if session_id in self.active_sessions:
