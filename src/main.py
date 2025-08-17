@@ -128,7 +128,7 @@ def setup_logging():
     logging.getLogger("openai").setLevel(logging.INFO)
     
     # MemOSのログレベル設定
-    logging.getLogger("memos.utils").setLevel(logging.INFO)
+    logging.getLogger("memos.utils").setLevel(logging.WARNING)
     logging.getLogger("memos.llms.openai").setLevel(logging.WARNING)
     logging.getLogger("memos.memories.textual.tree_text_memory.retrieve.searcher").setLevel(logging.ERROR)
 

@@ -37,7 +37,7 @@ class CharacterData(BaseModel):
 class LoggingConfig(BaseModel):
     """ログ設定"""
 
-    level: str = "INFO"
+    level: str = "DEBUG"
     file: str = "logs/cocoro_core2.log"
     max_size_mb: int = 10
     backup_count: int = 5
@@ -45,12 +45,12 @@ class LoggingConfig(BaseModel):
     
     # ログ長制限関連
     enable_truncation: bool = True
-    truncate_marker: str = "_切り詰め"
-    max_message_length: int = 200  # デフォルト値
+    truncate_marker: str = "【切り詰め】"
+    max_message_length: int = 2000  # デフォルト値
     level_specific_lengths: Dict[str, int] = {
         "DEBUG": 200,
         "INFO": 200,
-        "WARNING": 300,
+        "WARNING": 400,
         "ERROR": 10000,
         "CRITICAL": 10000
     }

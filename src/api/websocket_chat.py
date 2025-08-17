@@ -11,7 +11,6 @@ import uuid
 from asyncio import Queue
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Optional, Any
-from pathlib import Path
 
 from fastapi import WebSocket, WebSocketDisconnect, Depends, APIRouter
 from pydantic import BaseModel
@@ -69,6 +68,65 @@ class WebSocketChatManager:
         
         logger.info(f"WebSocket切断処理完了: client_id={client_id}, 停止セッション数={len(sessions_to_stop)}")
     
+    def _log_chunk_debug(self, sse_chunk: str, chunk_count: int):
+        """チャンクのデバッグ出力（開発時のみ）"""
+        try:
+            if not sse_chunk.startswith("data: "):
+                return
+            
+            json_data = sse_chunk[6:].strip()
+            if not json_data or json_data == "[DONE]":
+                return
+            
+            chunk_info = json.loads(json_data)
+            chunk_type = chunk_info.get("type", "unknown")
+            
+            if chunk_type == "text":
+                content = chunk_info.get("data", "")
+                logger.info(f"[MOSProduct] チャンク{chunk_count}: {content}")
+            elif chunk_type == "end":
+                logger.info(f"[MOSProduct] 処理完了: チャンク数={chunk_count}")
+            else:
+                logger.debug(f"[MOSProduct] {chunk_type}: {json_data}")
+                
+        except Exception as e:
+            logger.debug(f"デバッグ出力エラー: {e}")
+    
+    def _fix_utf8_chunk(self, sse_chunk: str, chunk_number: int) -> str:
+        """UTF-8文字化け修復処理（トークン境界による破損対応）"""
+        try:
+            # SSE形式チェック
+            if not sse_chunk.startswith("data: "):
+                return sse_chunk
+            
+            # JSON解析
+            json_str = sse_chunk[6:].strip()
+            if not json_str or json_str == "[DONE]":
+                return sse_chunk
+            
+            chunk_data = json.loads(json_str)
+            
+            # textタイプのみ処理
+            if chunk_data.get("type") != "text":
+                return sse_chunk
+            
+            content = chunk_data.get("data", "")
+            if not content or "�" not in content:
+                return sse_chunk
+            
+            # 文字化け修復
+            fixed_content = content.replace("�", "")
+            logger.warning(f"UTF-8文字化け修復: chunk#{chunk_number} '{content}' -> '{fixed_content}'")
+            
+            # 修復後のチャンクを再構築
+            chunk_data["data"] = fixed_content
+            fixed_json = json.dumps(chunk_data, ensure_ascii=False)
+            return f"data: {fixed_json}\n\n"
+            
+        except Exception as e:
+            logger.warning(f"UTF-8修復エラー: chunk#{chunk_number}, {e}")
+            return sse_chunk
+    
     async def handle_message(self, client_id: str, message: dict, app):
         """WebSocketメッセージ処理"""
         websocket = self.active_connections.get(client_id)
@@ -109,7 +167,7 @@ class WebSocketChatManager:
         """チャットストリーミング処理（非ブロッキング）"""
         
         # セッション用キューとステータス
-        session_queue = Queue(maxsize=100)
+        session_queue = Queue(maxsize=50)  # 適度なサイズ
         session_info = {
             "queue": session_queue,
             "active": True,
@@ -142,12 +200,21 @@ class WebSocketChatManager:
                     ):
                         chunk_count += 1
                         
-                        # キューに結果を追加（メインループ指定）
-                        future = asyncio.run_coroutine_threadsafe(
-                            session_queue.put(sse_chunk),
-                            main_loop
-                        )
-                        future.result(timeout=1.0)  # タイムアウト付き待機
+                        # デバッグ出力とUTF-8修復処理
+                        self._log_chunk_debug(sse_chunk, chunk_count)
+                        
+                        # UTF-8文字化け修復処理
+                        fixed_chunk = self._fix_utf8_chunk(sse_chunk, chunk_count)
+                        
+                        # キューに結果を追加（完全非同期）
+                        try:
+                            asyncio.run_coroutine_threadsafe(
+                                session_queue.put(fixed_chunk),
+                                main_loop
+                            )
+                        except Exception as queue_error:
+                            logger.error(f"キュー送信エラー: {queue_error}")
+                            break
                         
                         # 終了チェック
                         if '"type": "end"' in sse_chunk:
@@ -159,21 +226,19 @@ class WebSocketChatManager:
                     # エラーをキューに送信
                     error_chunk = f'data: {{"type": "error", "content": "{str(e)}"}}\n\n'
                     try:
-                        future = asyncio.run_coroutine_threadsafe(
+                        asyncio.run_coroutine_threadsafe(
                             session_queue.put(error_chunk),
                             main_loop
                         )
-                        future.result(timeout=1.0)
                     except Exception as queue_error:
                         logger.error(f"エラーキュー送信失敗: {queue_error}")
                 finally:
                     # 終了マーカー
                     try:
-                        future = asyncio.run_coroutine_threadsafe(
+                        asyncio.run_coroutine_threadsafe(
                             session_queue.put(None),  # 終了シグナル
                             main_loop
                         )
-                        future.result(timeout=1.0)
                     except Exception as cleanup_error:
                         logger.error(f"終了マーカー送信失敗: {cleanup_error}")
             
