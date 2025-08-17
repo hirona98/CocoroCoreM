@@ -153,7 +153,7 @@ interface ErrorMessage {
 // WebSocketメッセージ例
 {
   "action": "chat",
-  "session_id": "dock_20240120123456_abcd1234",
+  "session_id": "dock_20240120123456789",
   "request": {
     "query": "今日の予定を教えて",
     "chat_type": "text",
@@ -176,7 +176,7 @@ interface ErrorMessage {
 // WebSocketメッセージ例（ファイルから）
 {
   "action": "chat",
-  "session_id": "dock_20240120123456_abcd1234",
+  "session_id": "dock_20240120123456789",
   "request": {
     "query": "この画像について教えて",
     "chat_type": "text_image",
@@ -189,7 +189,7 @@ interface ErrorMessage {
 // WebSocketメッセージ例（クリップボードから貼り付け）
 {
   "action": "chat",
-  "session_id": "dock_20240120123456_abcd1234", 
+  "session_id": "dock_20240120123456789", 
   "request": {
     "query": "この画像について教えて",
     "chat_type": "text_image",
@@ -215,7 +215,7 @@ interface ErrorMessage {
 // WebSocketメッセージ例
 {
   "action": "chat",
-  "session_id": "dock_20240120123456_abcd1234",
+  "session_id": "dock_20240120123456789",
   "request": {
     "query": "写真が送信されました",
     "chat_type": "notification",
@@ -244,7 +244,7 @@ interface ErrorMessage {
 // WebSocketメッセージ例
 {
   "action": "chat",
-  "session_id": "dock_20240120123456_abcd1234",
+  "session_id": "dock_20240120123456789",
   "request": {
     "query": "デスクトップ画面を見て感想を教えて",
     "chat_type": "desktop_watch",
@@ -271,7 +271,7 @@ interface ErrorMessage {
 ### WebSocket接続
 
 - **エンドポイント**: `ws://localhost:{port}/ws/chat/{client_id}`
-- **client_id**: 一意なクライアント識別子（例: `dock_timestamp`）
+- **client_id**: 一意なクライアント識別子（例: `dock_20240120123456789`）
 - **接続ライフサイクル**: 接続後、複数セッションの並行処理が可能
 
 ### セッション管理
