@@ -22,26 +22,38 @@ class CharacterData(BaseModel):
     modelName: str = "つくよみちゃん"
     isUseLLM: bool = False
     apiKey: str = ""
-    llmModel: str = "gemini/gemini-2.0-flash"
+    llmModel: str = "gpt-4o-mini"
     # 画像分析用設定
     visionModel: str = "gpt-4o-mini"  # 画像分析用モデル
     visionApiKey: str = ""  # 画像分析用APIキー（空ならapiKeyを使用）
     localLLMBaseUrl: str = ""
     systemPromptFilePath: str = ""
     isEnableMemory: bool = False
-    userId: str = ""
+    memoryId: str = ""
     embeddedApiKey: str = ""
-    embeddedModel: str = "ollama/nomic-embed-text"
+    embeddedModel: str = "text-embedding-3-small"
 
 
 class LoggingConfig(BaseModel):
     """ログ設定"""
 
-    level: str = "INFO"
+    level: str = "DEBUG"
     file: str = "logs/cocoro_core2.log"
     max_size_mb: int = 10
     backup_count: int = 5
     format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    
+    # ログ長制限関連
+    enable_truncation: bool = True
+    truncate_marker: str = "【切り詰め】"
+    max_message_length: int = 2000  # デフォルト値
+    level_specific_lengths: Dict[str, int] = {
+        "DEBUG": 200,
+        "INFO": 200,
+        "WARNING": 400,
+        "ERROR": 10000,
+        "CRITICAL": 10000
+    }
 
 
 class CocoroAIConfig(BaseModel):
@@ -68,6 +80,7 @@ class CocoroAIConfig(BaseModel):
     enable_pro_mode: bool = Field(default=True, description="PRO_MODE（Chain of Thought）を有効にする")
     enable_internet_retrieval: bool = Field(default=False, description="インターネット検索機能を有効にする")
     enable_memory_scheduler: bool = Field(default=True, description="メモリスケジューラーを有効にする（常に有効）")
+    enable_activation_memory: bool = Field(default=False, description="アクティベーションメモリ更新を有効にする（API経由LLMでは通常無効）")
 
     # Memory Scheduler詳細設定
     scheduler_top_k: int = Field(default=5, description="スケジューラーのメモリ取得数")
@@ -77,7 +90,6 @@ class CocoroAIConfig(BaseModel):
     scheduler_thread_pool_max_workers: int = Field(default=8, description="スケジューラーの最大ワーカー数")
     scheduler_consume_interval_seconds: int = Field(default=3, description="メッセージ消費間隔（秒）")
     scheduler_enable_parallel_dispatch: bool = Field(default=True, description="並列メッセージ処理を有効にする")
-    scheduler_enable_act_memory_update: bool = Field(default=False, description="アクティベーションメモリ更新を有効にする（API経由LLMでは通常無効）")
 
     # Internet Retrieval設定
     googleApiKey: str = Field(default="", description="Google Custom Search API キー")
@@ -103,7 +115,7 @@ class CocoroAIConfig(BaseModel):
     def character_name(self) -> str:
         """現在のキャラクター名"""
         char = self.current_character
-        return char.modelName if char else "つくよみちゃん"
+        return char.modelName
 
     @classmethod
     def load(cls, config_path: Optional[str] = None) -> "CocoroAIConfig":
@@ -231,9 +243,31 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig") -> Dict[
     embedded_model = current_character.embeddedModel or "text-embedding-3-large"
     embedded_api_key = current_character.embeddedApiKey or api_key  # APIキーが空なら通常のを使用
 
+    # UserData2ディレクトリを探す（DBファイル保存用）
+    base_dir = Path(__file__).parent.parent
+    user_data_paths = [
+        base_dir.parent / "UserData2",  # CocoroCore2/../UserData2/
+        base_dir.parent.parent / "UserData2",  # CocoroAI/UserData2/
+    ]
+    
+    user_data_dir = None
+    for path in user_data_paths:
+        if path.exists():
+            user_data_dir = path
+            break
+    
+    if user_data_dir is None:
+        # デフォルトは一つ上のディレクトリに作成
+        user_data_dir = base_dir.parent / "UserData2"
+    
+    # Memory ディレクトリを作成し、memos_users.dbのパスを設定
+    memory_dir = user_data_dir / "Memory"
+    memory_dir.mkdir(parents=True, exist_ok=True)
+    db_path = str(memory_dir / "memos_users.db")
+
     # MemOS設定を動的に構築
     memos_config = {
-        "user_id": current_character.userId or "user",
+        "user_id": "user",
         "chat_model": {"backend": "openai", "config": {"model_name_or_path": llm_model, "api_key": api_key, "api_base": "https://api.openai.com/v1"}},
         "mem_reader": {
             "backend": "simple_struct",
@@ -242,6 +276,14 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig") -> Dict[
                 "embedder": {"backend": "universal_api", "config": {"model_name_or_path": embedded_model, "provider": "openai", "api_key": embedded_api_key, "base_url": "https://api.openai.com/v1"}},
                 "chunker": {"backend": "sentence", "config": {"chunk_size": 512, "chunk_overlap": 128}},
             },
+        },
+        # UserManager設定（SQLiteのDB保存場所を指定）
+        "user_manager": {
+            "backend": "sqlite",
+            "config": {
+                "user_id": "root",
+                "db_path": db_path
+            }
         },
         # MemOS高度機能設定
         "max_turns_window": cocoro_config.max_turns_window,
@@ -264,7 +306,7 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig") -> Dict[
             "thread_pool_max_workers": cocoro_config.scheduler_thread_pool_max_workers,
             "consume_interval_seconds": cocoro_config.scheduler_consume_interval_seconds,
             "enable_parallel_dispatch": cocoro_config.scheduler_enable_parallel_dispatch,
-            "enable_act_memory_update": cocoro_config.scheduler_enable_act_memory_update,
+            "enable_act_memory_update": cocoro_config.enable_activation_memory,
         },
     }
 

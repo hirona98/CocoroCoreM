@@ -27,21 +27,69 @@ from contextlib import asynccontextmanager
 log_dir = Path(__file__).parent.parent / "logs"
 log_dir.mkdir(exist_ok=True)
 
+class HealthCheckFilter(logging.Filter):
+    """ヘルスチェックリクエストを除外するフィルター"""
+    def filter(self, record):
+        # /api/health へのアクセスログを除外
+        return not (hasattr(record, 'getMessage') and '/api/health' in record.getMessage())
+
+
+class TruncatingFormatter(logging.Formatter):
+    """メッセージ長を制限するカスタムフォーマッター（レベル別対応）"""
+    
+    def __init__(self, fmt=None, datefmt=None, max_length=1000, level_specific_lengths=None, truncate_marker="...", enable_truncation=True):
+        super().__init__(fmt, datefmt)
+        self.max_length = max_length  # デフォルト値
+        self.level_specific_lengths = level_specific_lengths or {}
+        self.truncate_marker = truncate_marker
+        self.enable_truncation = enable_truncation
+    
+    def format(self, record):
+        # 元のフォーマット処理
+        formatted = super().format(record)
+        
+        # 長さ制限（有効な場合のみ）
+        if self.enable_truncation:
+            # レベル別制限を取得（なければデフォルト値を使用）
+            max_length = self.level_specific_lengths.get(record.levelname, self.max_length)
+            
+            if len(formatted) > max_length:
+                truncate_point = max_length - len(self.truncate_marker)
+                formatted = formatted[:truncate_point] + self.truncate_marker
+        
+        return formatted
+
+
 def setup_logging():
     """ログ設定を初期化"""
-    # ログフォーマット
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    # アプリケーション設定からログ設定を取得
+    app_instance = get_app_instance()
+    if app_instance and app_instance.config:
+        log_config = app_instance.config.logging
+    else:
+        # デフォルト設定
+        from core.config_manager import LoggingConfig
+        log_config = LoggingConfig()
+    
+    # カスタムフォーマッター（レベル別ログ長制限付き）
+    formatter = TruncatingFormatter(
+        fmt=log_config.format,
+        max_length=log_config.max_message_length,
+        level_specific_lengths=log_config.level_specific_lengths,
+        truncate_marker=log_config.truncate_marker,
+        enable_truncation=log_config.enable_truncation
+    )
     
     # ルートロガー設定
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(getattr(logging, log_config.level.upper(), logging.INFO))
     
     # 既存のハンドラーをクリア
     root_logger.handlers.clear()
     
     # コンソールハンドラー
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(getattr(logging, log_config.level.upper(), logging.INFO))
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
     
@@ -49,12 +97,12 @@ def setup_logging():
     try:
         from logging.handlers import RotatingFileHandler
         file_handler = RotatingFileHandler(
-            log_dir / "cocoro_core2.log",
-            maxBytes=10 * 1024 * 1024,  # 10MB
-            backupCount=5,
+            log_dir / log_config.file.split('/')[-1],  # ファイル名部分のみ使用
+            maxBytes=log_config.max_size_mb * 1024 * 1024,
+            backupCount=log_config.backup_count,
             encoding='utf-8'
         )
-        file_handler.setLevel(logging.INFO)
+        file_handler.setLevel(getattr(logging, log_config.level.upper(), logging.INFO))
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
     except Exception as e:
@@ -62,20 +110,25 @@ def setup_logging():
     
     # uvicornのログレベル設定
     logging.getLogger("uvicorn").setLevel(logging.INFO)
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    
+    # uvicorn.accessにヘルスチェックフィルターを追加
+    uvicorn_access_logger = logging.getLogger("uvicorn.access")
+    uvicorn_access_logger.setLevel(logging.INFO)
+    uvicorn_access_logger.addFilter(HealthCheckFilter())
     
     # Neo4jのログレベル設定
     logging.getLogger("neo4j").setLevel(logging.INFO)
     logging.getLogger("neo4j.io").setLevel(logging.INFO)
     logging.getLogger("neo4j.pool").setLevel(logging.INFO)
     logging.getLogger("neo4j.notifications").setLevel(logging.WARNING)
-    
+
     # httpログレベル設定
     logging.getLogger("httpcore.http11").setLevel(logging.INFO)
     logging.getLogger("httpcore.connection").setLevel(logging.WARNING)
     logging.getLogger("openai").setLevel(logging.INFO)
     
     # MemOSのログレベル設定
+    logging.getLogger("memos.utils").setLevel(logging.WARNING)
     logging.getLogger("memos.llms.openai").setLevel(logging.WARNING)
     logging.getLogger("memos.memories.textual.tree_text_memory.retrieve.searcher").setLevel(logging.ERROR)
 
@@ -87,8 +140,7 @@ from core.config_manager import CocoroAIConfig, ConfigurationError, load_neo4j_c
 from utils.neo4j_manager import Neo4jManager
 from api.health import router as health_router
 from api.control import router as control_router
-from api.mcp import router as mcp_router
-from api.users import router as users_router
+from api.websocket_chat import router as websocket_router
 
 
 class CocoroCore2App:
@@ -118,14 +170,6 @@ class CocoroCore2App:
             # health.pyのインスタンス更新
             from api import health
             health._app_instance = self
-            
-            # mcp.pyのインスタンス更新
-            from api import mcp
-            mcp._app_instance = self
-            
-            # users.pyのインスタンス更新
-            from api import users
-            users._app_instance = self
             
             logger.info("ルーターのグローバルインスタンスを更新しました")
             
@@ -172,8 +216,10 @@ class CocoroCore2App:
             # APIルーター追加
             self.app.include_router(health_router)
             self.app.include_router(control_router)
-            self.app.include_router(mcp_router)
-            self.app.include_router(users_router)
+            self.app.include_router(websocket_router)
+            
+            # FastAPIのstate経由でアプリケーションインスタンスを保存
+            self.app.state.core_app = self
             
             # 依存性注入のためのグローバルインスタンス更新
             self._update_router_instances()
@@ -272,9 +318,7 @@ class CocoroCore2App:
             )
             
             self.uvicorn_server = uvicorn.Server(config)
-            
-            logger.info(f"CocoroCore2サーバーが起動しました: http://localhost:{port}")
-            
+            logger.info(f"CocoroCore2サーバーが起動しました: http://127.0.0.1:{port}")
             # サーバー実行
             await self.uvicorn_server.serve()
             
@@ -286,6 +330,15 @@ class CocoroCore2App:
         """リソースクリーンアップ処理"""
         try:
             logger.info("リソースクリーンアップを開始...")
+            
+            # WebSocketマネージャー停止
+            try:
+                from api.websocket_chat import get_websocket_manager
+                websocket_manager = get_websocket_manager()
+                websocket_manager.shutdown()
+                logger.info("WebSocketマネージャー停止完了")
+            except Exception as e:
+                logger.warning(f"WebSocketマネージャー停止エラー: {e}")
             
             # MOSProduct停止
             if self.cocoro_product:

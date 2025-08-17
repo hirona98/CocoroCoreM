@@ -153,7 +153,7 @@ class Neo4jManager:
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                     sock.settimeout(1)
-                    result = sock.connect_ex(('localhost', port))
+                    result = sock.connect_ex(('127.0.0.1', port))
                     if result == 0:  # 接続成功 = ポート使用中
                         self.logger.error(f"ポート {port} は既に使用中です")
                         return False

@@ -6,13 +6,50 @@ MemOS MOSProductのラッパークラス実装
 
 import asyncio
 import logging
+import os
+import re
 from typing import AsyncIterator, Dict, List, Optional
 from pathlib import Path
 
+# MemOSインポート前にMOS_CUBE_PATH環境変数を設定（重要）
+def _setup_mos_cube_path():
+    """MemOSのCUBE_PATHを事前設定（相対パス使用）"""
+    # 実行時の基準ディレクトリ（CocoroCore2）からの相対パス
+    # main.py実行時の作業ディレクトリが基準
+    relative_cubes_dir = "../UserData2/Memory/cubes"
+    
+    # ディレクトリを事前作成（絶対パスで）
+    base_dir = Path(__file__).parent.parent
+    user_data_paths = [
+        base_dir.parent / "UserData2",  # CocoroCore2/../UserData2/
+        base_dir.parent.parent / "UserData2",  # CocoroAI/UserData2/
+    ]
+    
+    user_data_dir = None
+    for path in user_data_paths:
+        if path.exists():
+            user_data_dir = path
+            break
+    
+    if user_data_dir is None:
+        user_data_dir = base_dir.parent / "UserData2"
+    
+    memory_dir = user_data_dir / "Memory" / "cubes"
+    memory_dir.mkdir(parents=True, exist_ok=True)
+    
+    # MemOSには相対パスを設定（ポータブル性向上）
+    os.environ["MOS_CUBE_PATH"] = relative_cubes_dir
+    return relative_cubes_dir
+
+# MemOSインポート前にパス設定を実行
+_cube_path = _setup_mos_cube_path()
+
 from memos.mem_os.product import MOSProduct
 from memos import GeneralMemCube
+from memos.configs.mem_cube import GeneralMemCubeConfig
 
 from .config_manager import CocoroAIConfig, generate_memos_config_from_setting, get_mos_config
+from .cocoro_mos_product import CocoroMOSProduct
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +70,13 @@ class CocoroProductWrapper:
         # MOSConfig動的生成（確証：config.py実装済み）
         mos_config = get_mos_config(cocoro_config)
         
-        # MOSProduct初期化（確証：MemOS product.py仕様）
-        self.mos_product = MOSProduct(
+        logger.info(f"MOS_CUBE_PATH設定: {_cube_path}")
+        
+        # CocoroMOSProduct初期化（CocoroAI専用システムプロンプト対応）
+        self.mos_product = CocoroMOSProduct(
             default_config=mos_config,
-            max_user_instances=1  # シングルユーザー
+            max_user_instances=1,  # シングルユーザー
+            system_prompt_provider=self.get_system_prompt  # CocoroAIシステムプロンプト取得関数を渡す
         )
         
         # 画像・メッセージ生成器は後で初期化（循環参照回避）
@@ -44,25 +84,106 @@ class CocoroProductWrapper:
         self.message_generator = None
         
         # 現在のユーザーIDを設定
-        current_character = cocoro_config.current_character
-        self.current_user_id = current_character.userId if current_character else "user"
+        self.current_user_id = "user"
+        
+        # 現在のキャラクターのキューブID（起動時に確定）
+        self.current_cube_id: str = ""
         
         # システムプロンプトのパスを取得
         self.system_prompt_path = None
+        current_character = cocoro_config.current_character
         if current_character and current_character.systemPromptFilePath:
-            # UserData2ディレクトリからの相対パス
-            base_dir = Path(__file__).parent.parent.parent / "UserData2"
-            self.system_prompt_path = base_dir / current_character.systemPromptFilePath
+            # UserData2/SystemPromptsディレクトリからUUID部分でマッチング
+            user_data_dir = self._get_user_data_directory()
+            self.system_prompt_path = self._find_system_prompt_file(
+                user_data_dir / "SystemPrompts", 
+                current_character.systemPromptFilePath
+            )
+    
+    def _get_user_data_directory(self) -> Path:
+        """UserData2ディレクトリを取得（config_manager.pyと同じロジック）"""
+        base_dir = Path(__file__).parent.parent
+        user_data_paths = [
+            base_dir.parent / "UserData2",  # CocoroCore2/../UserData2/
+            base_dir.parent.parent / "UserData2",  # CocoroAI/UserData2/
+        ]
+        
+        for path in user_data_paths:
+            if path.exists():
+                return path
+        
+        # デフォルトは一つ上のディレクトリに作成
+        return base_dir.parent / "UserData2"
+    
+    def _extract_uuid_from_filename(self, filename: str) -> Optional[str]:
+        """
+        ファイル名からUUID部分を抽出
+        
+        Args:
+            filename: ファイル名（例: "つくよみちゃん_50e3ba63-f0f1-ecd4-5a54-3812ac2cc863.txt"）
+            
+        Returns:
+            str: UUID部分（例: "50e3ba63-f0f1-ecd4-5a54-3812ac2cc863"）またはNone
+        """
+        # UUID パターン: 8-4-4-4-12 文字のハイフン区切り
+        uuid_pattern = r'([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})'
+        match = re.search(uuid_pattern, filename)
+        return match.group(1) if match else None
+    
+    def _find_system_prompt_file(self, prompts_dir: Path, target_filename: str) -> Optional[Path]:
+        """
+        UUID部分でマッチするシステムプロンプトファイルを検索
+        
+        Args:
+            prompts_dir: SystemPromptsディレクトリのパス
+            target_filename: 設定ファイルで指定されたファイル名
+            
+        Returns:
+            Path: マッチしたファイルのパスまたはNone
+        """
+        if not prompts_dir.exists():
+            logger.warning(f"SystemPromptsディレクトリが存在しません: {prompts_dir}")
+            return None
+        
+        # 設定ファイルのファイル名からUUIDを抽出
+        target_uuid = self._extract_uuid_from_filename(target_filename)
+        if not target_uuid:
+            logger.warning(f"設定ファイル名からUUIDを抽出できませんでした: {target_filename}")
+            # フォールバック: 元のファイル名で直接検索
+            fallback_path = prompts_dir / target_filename
+            if fallback_path.exists():
+                logger.info(f"フォールバック: 直接ファイル名でマッチしました: {fallback_path}")
+                return fallback_path
+            return None
+        
+        # SystemPromptsディレクトリ内の全.txtファイルを検索
+        for file_path in prompts_dir.glob("*.txt"):
+            file_uuid = self._extract_uuid_from_filename(file_path.name)
+            if file_uuid and file_uuid.lower() == target_uuid.lower():
+                logger.info(f"UUID部分でマッチしたファイルを発見: {file_path}")
+                return file_path
+        
+        logger.warning(f"UUID '{target_uuid}' にマッチするファイルが見つかりませんでした")
+        return None
     
     async def initialize(self):
         """非同期初期化処理"""
         try:
             # ユーザーが未登録の場合は登録
-            users = self.mos_product.list_users()
+            users = self.mos_product.list_users() # CocoroAIでは"user"が一つのみ固定
             # usersはUserオブジェクトのリストなので属性でアクセス
             user_ids = [u.user_id if hasattr(u, 'user_id') else str(u) for u in users]
             if self.current_user_id not in user_ids:
                 self.register_current_user()
+            
+            # 現在のキャラクターのMemCubeを作成・設定
+            self._setup_current_character_cube()
+            
+            # トークナイザーを無効化して文字ベースチャンクに切り替え（UTF-8文字化け対策）
+            if hasattr(self.mos_product, 'tokenizer'):
+                logger.info(f"トークナイザーを無効化（UTF-8文字化け対策）: {self.mos_product.tokenizer is not None}")
+                self.mos_product.tokenizer = None
+                logger.info("文字ベースチャンクに切り替え完了")
             
             logger.info(f"CocoroProductWrapper初期化完了: ユーザー={self.current_user_id}")
             
@@ -70,21 +191,173 @@ class CocoroProductWrapper:
             logger.error(f"CocoroProductWrapper初期化エラー: {e}")
             raise
     
+    def _setup_current_character_cube(self):
+        """現在のキャラクターのMemCubeを作成・設定（起動時1回のみ）"""
+        # 現在のキャラクター情報を確認
+        current_character = self.cocoro_config.current_character
+        if not current_character:
+            raise RuntimeError("現在のキャラクターが設定されていません")
+        
+        if not current_character.memoryId:
+            raise RuntimeError(f"キャラクター '{current_character.modelName}' のmemoryIdが設定されていません")
+        
+        # キューブIDを生成・設定
+        self.current_cube_id = f"user_user_{current_character.memoryId}_cube"
+        
+        # 既存のキューブリストを取得
+        existing_cubes = self.mos_product.user_manager.get_user_cubes(self.current_user_id)
+        existing_cube = None
+        for cube in existing_cubes:
+            cube_id = getattr(cube, 'cube_id', str(cube))
+            if cube_id == self.current_cube_id:
+                existing_cube = cube
+                break
+        
+        if existing_cube and getattr(existing_cube, 'cube_path', None) is not None:
+            # 既存キューブを使用（cube_pathが有効な場合のみ）
+            logger.info(f"既存キューブを使用: {self.current_cube_id} (キャラクター: {current_character.modelName})")
+        else:
+            # 新規作成またはcube_pathがNoneの場合は再作成
+            if existing_cube:
+                logger.warning(f"既存キューブのcube_pathがNullのため再作成: {self.current_cube_id}")
+            else:
+                logger.info(f"新規キューブを作成: {self.current_cube_id} (キャラクター: {current_character.modelName})")
+            self._create_cube(current_character)
+    
+    def _create_cube(self, character):
+        """キューブ作成処理"""
+        cube_name = f"{character.modelName}_{character.memoryId}_cube"
+        
+        # setting.jsonと同じUserData2ディレクトリにキューブデータを保存
+        user_data_dir = self._get_user_data_directory()
+        
+        # Memory ディレクトリ下にキューブデータを保存
+        memory_dir = user_data_dir / "Memory"
+        cube_data_dir = memory_dir / "cubes"
+        cube_data_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 個別のキューブディレクトリを明示的に作成
+        cube_path_dir = cube_data_dir / self.current_cube_id
+        cube_path_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 相対パスで保存（ポータブル性向上）
+        # 基準はmain.py実行時の作業ディレクトリ（CocoroCore2）
+        cube_path = f"../UserData2/Memory/cubes/{self.current_cube_id}"
+        
+        # 1. データベースにキューブレコードを作成
+        created_cube_id = self.mos_product.create_cube_for_user(
+            cube_name=cube_name,
+            owner_id=self.current_user_id,
+            cube_id=self.current_cube_id,
+            cube_path=cube_path
+        )
+        
+        # 2. MemOS標準フローに従ったキューブ初期化
+        
+        # 現在のキャラクター設定からAPIキーを取得
+        current_character = self.cocoro_config.current_character
+        api_key = current_character.apiKey if current_character and current_character.apiKey else ""
+        
+        # 最小限のconfig.jsonを作成（MemOSの標準フロー）
+        import json
+        
+        # Neo4j設定を取得（Community Edition対応）
+        neo4j_config = {
+            "uri": "bolt://localhost:55603",
+            "user": "neo4j", 
+            "password": "password",
+            "db_name": "neo4j",
+            "use_multi_db": False,  # Community Editionでは必須
+            "user_name": self.current_user_id,  # 論理的分離用
+            "auto_create": False,
+            "embedding_dimension": 1536  # text-embedding-3-small の次元
+        }
+        
+        config_data = {
+            "model_schema": "memos.configs.mem_cube.GeneralMemCubeConfig",
+            "user_id": self.current_user_id,
+            "cube_id": self.current_cube_id,
+            "text_mem": {
+                "backend": "tree_text",
+                "config": {
+                    "cube_id": self.current_cube_id,
+                    "extractor_llm": {
+                        "backend": "openai",
+                        "config": {
+                            "model_name_or_path": "gpt-4o-mini",
+                            "api_key": api_key,
+                            "api_base": "https://api.openai.com/v1"
+                        }
+                    },
+                    "dispatcher_llm": {
+                        "backend": "openai", 
+                        "config": {
+                            "model_name_or_path": "gpt-4o-mini",
+                            "api_key": api_key,
+                            "api_base": "https://api.openai.com/v1"
+                        }
+                    },
+                    "graph_db": {
+                        "backend": "neo4j",
+                        "config": neo4j_config
+                    },
+                    "embedder": {
+                        "backend": "universal_api",
+                        "config": {
+                            "model_name_or_path": "text-embedding-3-small",
+                            "provider": "openai",
+                            "api_key": api_key,
+                            "base_url": "https://api.openai.com/v1"
+                        }
+                    }
+                }
+            },
+            "act_mem": {
+                "backend": "uninitialized",
+                "config": {}
+            },
+            "para_mem": {
+                "backend": "uninitialized", 
+                "config": {}
+            }
+        }
+        
+        config_file_path = cube_path_dir / "config.json"
+        with open(config_file_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=2)
+        
+        # 3. MemOS標準メカニズムでキューブを登録（パス指定）
+        memory_types = ["text_mem"]
+        if self.cocoro_config.enable_activation_memory:
+            memory_types.append("act_mem")
+        
+        # MemOSの標準フローに従い、パス指定でregister_mem_cube
+        # init_from_dirが自動実行され、text_memが適切に初期化される
+        self.mos_product.register_mem_cube(
+            mem_cube_name_or_path_or_object=cube_path,  # パス指定が重要
+            mem_cube_id=self.current_cube_id,
+            user_id=self.current_user_id,
+            memory_types=memory_types,
+            default_config=None
+        )
+        
+        logger.info(f"キューブ作成完了: {self.current_cube_id}")
+    
+    def get_current_cube_id(self) -> str:
+        """現在のキューブIDを取得"""
+        return self.current_cube_id
+    
     def register_current_user(self):
-        """現在のキャラクターをユーザーとして登録"""
+        """ユーザーを登録"""
         try:
-            current_character = self.cocoro_config.current_character
-            if not current_character:
-                raise ValueError("現在のキャラクターが設定されていません")
-            
-            # ユーザー登録
+            # CocoroAIはシングルユーザーシステムのため、user_nameは"user"に固定
             self.mos_product.user_register(
-                user_id=self.current_user_id,
-                user_name=current_character.modelName,
+                user_id="user",
+                user_name="user",  # 識別用なので何でも良い
                 config=get_mos_config(self.cocoro_config)
             )
             
-            logger.info(f"ユーザー登録完了: {self.current_user_id} ({current_character.modelName})")
+            logger.info(f"ユーザー登録完了: {self.current_user_id}")
             
         except Exception as e:
             logger.error(f"ユーザー登録エラー: {e}")
@@ -93,18 +366,21 @@ class CocoroProductWrapper:
     async def chat_with_references(
         self,
         query: str,
+        cube_id: str, # CocoroAIではキャラクター指定のために必須
         user_id: Optional[str] = None,
-        cube_id: Optional[str] = None,
         history: Optional[List] = None,
         internet_search: bool = False
     ) -> AsyncIterator[str]:
         """
         完全自動記憶管理付きストリーミングチャット
+        - ストリーミング終了シグナル（"type": "end"）を検出したら即座に終了
+        - MemOSの記憶保存処理（約2秒）を待たずに応答を返す
+        - 記憶保存はMemOS内部で非同期に継続される
         
         Args:
             query: ユーザークエリ
+            cube_id: メモリキューブID
             user_id: ユーザーID（省略時は現在のユーザー）
-            cube_id: メモリキューブID（省略時はデフォルト）
             history: 会話履歴
             internet_search: インターネット検索を有効にするか
             
@@ -116,7 +392,8 @@ class CocoroProductWrapper:
         
         try:
             # MOSProduct.chat_with_references による完全自動処理
-            async for chunk in self.mos_product.chat_with_references(
+            # MOSProductのchat_with_referencesは通常のgeneratorを返すため、async forではなくfor文を使用
+            for chunk in self.mos_product.chat_with_references(
                 query=query,
                 user_id=user_id,
                 cube_id=cube_id,
@@ -124,6 +401,11 @@ class CocoroProductWrapper:
                 internet_search=internet_search and self.cocoro_config.enable_internet_retrieval
             ):
                 yield chunk
+                
+                # ストリーミング完了シグナルを検出したら終了
+                if '"type": "end"' in chunk:
+                    logger.info(f"ストリーミング終了シグナルを検出。早期終了します。cube_id={cube_id}")
+                    break
                 
         except Exception as e:
             logger.error(f"チャット処理エラー: {e}")
@@ -173,7 +455,7 @@ class CocoroProductWrapper:
             raise
     
     def delete_all_memories(self, user_id: str) -> bool:
-        """ユーザーの全記憶削除"""
+        """ユーザー（キューブではない、基本的にはuser固定）の全記憶削除"""
         try:
             # ユーザーのメモリキューブを取得
             user_info = self.mos_product.get_user_info(user_id)

@@ -83,108 +83,172 @@ GET /api/mcp/tool-registration-log
 
 ---
 
-### チャット
+### チャットAPI
 
-TODO: 要検討
+#### `POST /api/chat/stream`
 
-CocoroDockからチャットリクエストを処理します。画像対応機能を含みます。
+CocoroDockからのチャットリクエストを処理し、ストリーミング形式で応答を返します。
 
-**メッセージタイプ**
-- `chat`: 通常チャット
-- `notification`: 通知
-- `desktop_monitoring`: デスクトップ監視
+**キューブID自動決定**: リクエストでcube_idを指定する必要はありません。CocoroCore2内部でSetting.jsonの現在のキャラクター情報から自動的に決定されます。
+
+**リクエスト**
+```json
+{
+  "query": "今日の予定を教えて",
+  "chat_type": "text",
+  "images": [
+    {
+      "data": "data:image/png;base64,iVBORw0KGgo..."
+    }
+  ],
+  "notification": {
+    "from": "LINE",
+    "original_message": "写真が送信されました"
+  },
+  "desktop_context": {
+    "window_title": "Visual Studio Code",
+    "application": "vscode",
+    "capture_type": "active",
+    "timestamp": "2025-01-15T10:30:00Z"
+  },
+  "history": [
+    {
+      "role": "user",
+      "content": "こんにちは",
+      "timestamp": "2025-01-15T10:25:00Z"
+    }
+  ],
+  "internet_search": true,
+  "request_id": "req_12345"
+}
+```
+
+**フィールド説明**
+- `query`: ユーザークエリ（必須）
+- `chat_type`: チャットタイプ（必須）
+  - `text`: テキストのみチャット
+  - `text_image`: テキスト+画像チャット
+  - `notification`: 通知への反応
+  - `desktop_watch`: デスクトップ監視
+- `images`: 画像データ配列（chat_type=text_image/notification/desktop_watch時）
+- `notification`: 通知データ（chat_type=notification時）
+- `desktop_context`: デスクトップコンテキスト（chat_type=desktop_watch時）
+- `history`: 会話履歴（オプション）
+- `internet_search`: インターネット検索の有効化（オプション）
+- `request_id`: リクエスト識別ID（オプション）
+
+**レスポンス（Server-Sent Events）**
+```
+Content-Type: text/event-stream
+
+data: {"type": "status", "data": {"stage": "processing", "message": "記憶を検索しています..."}}
+
+data: {"type": "status", "data": {"stage": "analyzing", "message": "画像を分析しています..."}}
+
+data: {"type": "status", "data": {"stage": "generating", "message": "応答を生成しています..."}}
+
+data: {"type": "text", "data": {"content": "こんにちは！", "chunk_id": 1}}
+
+data: {"type": "text", "data": {"content": "今日の予定について", "chunk_id": 2}}
+
+data: {"type": "reference", "data": {"memories": [...]}}
+
+data: {"type": "status", "data": {"stage": "completed", "message": "処理が完了しました"}}
+
+data: {"type": "end", "data": {"request_id": "req_12345"}}
+```
+
+**エラーレスポンス**
+```
+data: {"type": "error", "data": {"error_code": "image_analysis_failed", "message": "画像の分析に失敗しました"}}
+```
+
+**イベントタイプ**
+- `status`: 処理状況の通知
+- `text`: 応答テキストの配信
+- `reference`: 参照された記憶情報
+- `error`: エラー通知
+- `end`: ストリーム終了
 
 ---
 
 
-### ユーザー記憶統計
+### キューブ記憶統計
 
-TODO: 要検討
+#### `GET /api/memory/user/{memory_id}/stats`
 
-指定ユーザーの記憶統計情報を取得します。
+指定メモリキューブの記憶統計情報を取得します。
 
 **リクエスト**
 ```
-GET /api/memory/user/user123/stats
+GET /api/memory/user/listy/stats
 ```
 
 **レスポンス**
 ```json
 {
-  "user_id": "user123",
+  "memory_id": "listy",
+  "cube_id": "user_user_listy_cube",
   "total_memories": 150,
   "text_memories": 120,
   "activation_memories": 20,
   "parametric_memories": 10,
   "last_updated": "2025-01-01T11:30:00Z",
-  "cube_id": "cube123",
   "timestamp": "2025-01-01T12:00:00Z"
 }
 ```
 
 ---
 
-### ユーザー記憶削除
+### キューブ記憶削除
 
-#### `DELETE /api/memory/user/{user_id}/all`
+#### `DELETE /api/memory/user/{memory_id}/all`
 
-指定ユーザーの全記憶を削除します。
+指定メモリキューブの全記憶を削除します。
 
 **リクエスト**
 ```
-DELETE /api/memory/user/user123/all
+DELETE /api/memory/user/listy/all
 ```
 
 **レスポンス**
 ```json
 {
   "status": "success",
-  "message": "ユーザー user123 の記憶を削除しました",
+  "message": "listyの記憶を削除しました",
   "timestamp": "2025-01-01T12:00:00Z"
 }
 ```
 
 ---
 
-### ユーザーリスト取得
+### キャラクターキューブリスト取得
 
-#### `GET /api/users`
+#### `GET /api/cubes`
 
-システムに登録されているユーザーリストを取得します。
+すべてのキャラクターキューブの一覧を取得します。
 
 **リクエスト**
 ```
-GET /api/users
+GET /api/cubes
 ```
 
 **レスポンス**
 ```json
 {
   "status": "success",
-  "message": "3名のユーザーを取得しました",
+  "message": "2つのメモリキューブを取得しました",
   "data": [
     {
-      "user_id": "550e8400-e29b-41d4-a716-446655440000",
-      "user_name": "田中太郎"
+      "memory_id": "miku",
+      "cube_id": "user_user_miku_cube",
+      "character_name": "初音ミク"
     },
     {
-      "user_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-      "user_name": "佐藤花子"
+      "memory_id": "tsukuyomichan",
+      "cube_id": "user_user_tsukuyomichan_cube", 
+      "character_name": "つくよみちゃん"
     }
   ]
 }
 ```
-
----
-
-### ユーザー作成
-
-TODO: 要検討
-
-新しいユーザーを作成します。
-
-
-## 注意事項
-
-- すべてのAPIは`127.0.0.1`でのローカル接続のみ対応
-- 画像ファイルはBase64エンコードで送信

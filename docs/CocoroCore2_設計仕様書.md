@@ -1,11 +1,5 @@
 # CocoroCore2 設計仕様書
 
-**版数**: 1.0  
-**作成日**: 2025年1月14日  
-**基準**: 確証のある調査結果のみ記載
-
----
-
 ## 1. プロジェクト概要
 
 ### 1.1 システム概要
@@ -15,6 +9,7 @@ CocoroCore2は、MemOS（Memory Operating System）のMOSProductをベースと�
 - **マルチモーダル対話**: テキスト+画像対応のストリーミングチャット
 - **完全自動記憶管理**: MemScheduler統合による全自動記憶保存・整理・最適化
 - **高度記憶機能**: MemOS統合によるNeo4j+SQLiteベースの永続記憶
+- **キューブID自動決定**: Setting.jsonから自動生成
 - **通知・監視機能**: 外部通知とデスクトップ監視の独り言生成
 - **設定統合管理**: Setting.json統合による動的設定変換
 - **ログ統合管理**: CocoroDockとの連携ログシステム
@@ -120,72 +115,9 @@ class LogManager:
 
 ---
 
-## 3. API仕様
+## 3. 設定管理システム
 
-### 3.1 エンドポイント一覧（簡素化済み）
-
-#### コア機能API
-| メソッド | エンドポイント | 機能 | 記憶管理 |
-|---------|---------------|------|----------|
-| POST | `/api/chat/stream` | **メイン機能：完全自動記憶付きチャット** | ✅ 全自動 |
-
-#### システム管理API
-| メソッド | エンドポイント | 機能 | 実装ベース |
-|---------|---------------|------|------------|
-| GET | `/api/health` | ヘルスチェック | 独自実装 |
-| POST | `/api/control` | システム制御 | 独自実装 |
-| GET | `/api/mcp/tool-registration-log` | MCPツール登録ログ | 独自実装 |
-
-#### ユーザー・記憶管理API（最小限）
-| メソッド | エンドポイント | 機能 | 実装ベース |
-|---------|---------------|------|------------|
-| GET | `/api/users` | ユーザーリスト取得 | MemOS流用 |
-| POST | `/api/users` | ユーザー作成 | MemOS流用 |
-| GET | `/api/users/{user_id}` | ユーザー情報取得 | MemOS流用 |
-| GET | `/api/memory/user/{user_id}/stats` | 記憶統計取得 | MemOS流用 |
-| DELETE | `/api/memory/user/{user_id}/all` | 記憶全削除 | MemOS流用 |
-
-### 3.2 主要API仕様
-
-#### ストリーミングチャット
-```
-POST /api/chat/stream
-Content-Type: application/json
-
-Request:
-{
-  "query": "string",
-  "user_id": "string", 
-  "context": {
-    "source_type": "chat|notification|desktop_monitoring",
-    "images": ["data:image/jpeg;base64,..."],  // Base64画像配列
-    "notification_from": "string"  // 通知元（通知時のみ）
-  }
-}
-
-Response: text/event-stream
-data: {"type": "text", "data": "応答内容"}
-data: {"type": "end"}
-
-Error:
-data: {"type": "error", "data": "エラーメッセージ"}
-```
-
-### 3.3 レスポンス型定義
-**確証**: CocoroDock/CommunicationModels.cs定義済み
-
-- `StandardResponse` - 標準成功レスポンス
-- `ErrorResponse` - エラーレスポンス  
-- `HealthCheckResponse` - ヘルスチェック結果
-- `UsersListResponse` - ユーザーリスト
-- `MemoryStatsResponse` - 記憶統計
-- `MemoryDeleteResponse` - 記憶削除結果
-
----
-
-## 4. 設定管理システム
-
-### 4.1 設定ファイル構造
+### 3.1 設定ファイル構造
 
 #### 設定ファイルパス（確証：参考コード実装済み）
 ```
@@ -229,7 +161,7 @@ data: {"type": "error", "data": "エラーメッセージ"}
 }
 ```
 
-### 4.2 設定変換フロー（確証：参考コード実装済み）
+### 3.2 設定変換フロー（確証：参考コード実装済み）
 
 ```
 Setting.json読込
@@ -243,7 +175,7 @@ load_neo4j_config() → Neo4j接続設定
 各コンポーネント初期化
 ```
 
-### 4.3 MOSConfig生成仕様（確証：参考コード実装済み）
+### 3.3 MOSConfig生成仕様（確証：参考コード実装済み）
 
 ```python
 def generate_memos_config_from_setting(cocoro_config: CocoroAIConfig):
@@ -251,7 +183,7 @@ def generate_memos_config_from_setting(cocoro_config: CocoroAIConfig):
     current_character = cocoro_config.current_character
     
     return {
-        "user_id": current_character.userId,
+        "user_id": "user",
         "chat_model": {
             "backend": "openai",
             "config": {
@@ -282,15 +214,15 @@ def generate_memos_config_from_setting(cocoro_config: CocoroAIConfig):
 
 ---
 
-## 5. データフロー設計
+## 4. データフロー設計
 
-### 5.1 完全自動記憶管理付きチャット処理フロー
+### 4.1 完全自動記憶管理付きチャット処理フロー
 
 #### 通常チャット（確証：product.py:728-899 + CocoroCoreClient.cs仕様）
 ```
 1. CocoroDock → POST /api/chat/stream
-2. MemOSChatRequest受信（query, user_id, context）
-3. ImageContext解析（source_type判定）
+2. ChatRequest受信（query, chat_type, images, notification, desktop_context）
+3. chat_type判定による処理分岐（text|text_image|notification|desktop_watch）
 4. 画像ありの場合：
    a. Base64デコード・検証
    b. ImageAnalyzer.analyze_image()（OpenAI Vision API）
@@ -331,7 +263,7 @@ def generate_memos_config_from_setting(cocoro_config: CocoroAIConfig):
 5. "○○をしているのね。××ですね。"形式独り言生成
 ```
 
-### 5.2 MemScheduler完全自動記憶管理フロー（確証：product.py:728-899）
+### 4.2 MemScheduler完全自動記憶管理フロー（確証：product.py:728-899）
 
 ```
 🔥 MOSProduct.chat_with_references()実行
@@ -358,7 +290,7 @@ Neo4j（TreeTextMemory）+ SQLite（ユーザー管理）永続化
 - **ユーザー**: 全てのやり取りが自動で長期記憶に
 - **システム**: MemSchedulerによる最適化
 
-### 5.3 起動初期化フロー
+### 4.3 起動初期化フロー
 
 ```
 アプリ起動
@@ -373,7 +305,7 @@ Neo4j（TreeTextMemory）+ SQLite（ユーザー管理）永続化
 8. FastAPIサーバー起動（ポート55601）
 ```
 
-### 5.4 エラー処理フロー（確証：ユーザー仕様）
+### 4.4 エラー処理フロー（確証：ユーザー仕様）
 
 ```
 エラー発生
@@ -385,9 +317,9 @@ Neo4j（TreeTextMemory）+ SQLite（ユーザー管理）永続化
 
 ---
 
-## 6. 依存関係・環境要件
+## 5. 依存関係・環境要件
 
-### 6.1 Python依存関係（確証：DeepWiki調査 + 参考コード）
+### 5.1 Python依存関係（確証：DeepWiki調査 + 参考コード）
 
 ```python
 # requirements.txt
@@ -400,71 +332,16 @@ pydantic>=2.0.0
 openai>=1.0.0
 ```
 
-### 6.2 MemOS拡張機能（確証：DeepWiki仕様）
+### 5.2 MemOS拡張機能（確証：DeepWiki仕様）
 
 - **tree-mem**: Neo4jベースTreeTextMemory（必須）
 - **mem-reader**: PDF・テキスト記憶化機能（推奨）
 - **mem-scheduler**: メモリスケジューラー（標準有効）
 
-### 6.3 外部サービス（確証：参考コード・設定仕様）
+### 5.3 外部サービス（確証：参考コード・設定仕様）
 
 - **OpenAI API**: テキスト生成（llmModel）+ 画像分析（visionModel）+ 埋め込み（embeddedModel）
 - **Neo4j**: 組み込み版（ポート55603, 55606）
-
-### 6.4 実行要件
-
-- **OS**: Windows（PyInstaller配布）
-- **Python**: 3.10以上
-- **実行オプション**: `python -X utf8`（UTF-8モード必須）
-- **ポート**: 55601（CocoroCore2）, 55603（Neo4j）, 55606（Neo4j Web）
-
----
-
-## 7. 実装計画
-
-### 7.1 開発優先順位（記憶管理自動化により大幅簡素化）
-
-#### フェーズ1: 基盤構築（高優先度）
-1. **設定管理システム** - 参考コードconfig.py流用
-2. **MOSProduct統合** - 簡素なラッパークラス実装  
-3. **Neo4j管理** - 非同期起動・接続管理
-4. **基本APIエンドポイント** - health, control実装
-
-#### フェーズ2: メイン機能（最重要）  
-1. **画像処理統合** - 参考コードanalyzer.py流用
-2. **メッセージ生成統合** - 参考コードmessage_generator.py流用
-3. **🔥 自動記憶管理付きストリーミングチャット** - MOSProduct.chat_with_references()活用
-4. **最小限ユーザー管理API** - MemOS product_router流用
-
-#### フェーズ3: 補完機能（低優先度）
-1. **ログ管理システム** - CocoroDock連携
-2. **MCP機能** - 最小限実装
-3. **エラーハンドリング** - 統一化
-
-#### ❌ 削除された作業（不要と判明）
-- ~~手動記憶管理API実装~~ → **MOSProductが全自動処理**
-- ~~記憶最適化ロジック~~ → **MemSchedulerが全自動処理**
-- ~~記憶検索エンドポイント~~ → **chat_with_references()が内蔵**
-
-### 7.2 技術的考慮事項
-
-#### 確証のある制約
-- **エラー処理**: フォールバック不要、ログ出力後終了
-- **起動方式**: Neo4j非同期起動、接続待ち合わせ必要
-- **ログ管理**: 最大300件保存、200件以降破棄、リアルタイム転送
-- **パフォーマンス**: トリッキーな方法使用禁止
-
-#### 実装時注意点
-1. **参考コードの活用**: analyzer.py, message_generator.py, config.py等はそのまま流用可能
-2. **🔥 MemOS自動記憶管理の最大活用**: MOSProduct.chat_with_references()メイン使用
-3. **CocoroDock期待仕様**: CommunicationModels.csのレスポンス型に準拠（必要なら変更可）
-4. **設定変換処理**: generate_memos_config_from_setting()等確証済み処理活用
-
-#### 🎯 記憶管理自動化による開発効率向上
-- **コード量削減**: 手動記憶管理コード全削除
-- **バグリスク軽減**: MemSchedulerの枯れた実装に依存
-- **保守性向上**: シンプルなAPIエンドポイント構成
-- **機能向上**: MemOSの高度な記憶最適化を自動取得
 
 ---
 
@@ -480,16 +357,3 @@ openai>=1.0.0
 ソースコード: ../Reference/MemOS
 ドキュメント: ../Reference/MemOS-Docs
 GitHub: https://github.com/MemTensor/MemOS （Deepwiki対応）
-
----
-
-## 📋 更新履歴
-
-**v1.1 (2025/01/14)**: 
-- MemOS MemScheduler完全自動記憶管理の発見により大幅更新
-- 手動記憶管理API削除、実装計画簡素化
-- 確証済み：Reference/MemOS/src/memos/mem_os/product.py:728-899
-
----
-
-**本設計書は確証のある調査結果のみに基づいて作成されており、推測や仮定は含まれていません。**
