@@ -18,7 +18,6 @@ class ImageAnalyzer:
         self.config = config
         self.logger = logger
 
-        self.multimodal_enabled = config.get("multimodal_enabled", True)
         self.max_image_size = config.get("max_image_size", 20000000)
         self.analysis_timeout_seconds = config.get("analysis_timeout_seconds", 60)
 
@@ -32,9 +31,6 @@ class ImageAnalyzer:
         Returns:
             ImageAnalysisResult: 分析結果
         """
-        if not self.multimodal_enabled:
-            self.logger.warning("マルチモーダル機能が無効になっています")
-            raise Exception("画像分析に失敗しました")
 
         if not image_urls:
             self.logger.warning("画像URLが提供されていません")

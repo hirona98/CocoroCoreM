@@ -7,10 +7,11 @@ CocoroCore2における統合チャット機能のAPI仕様を定義します。
 ## 設計原則
 
 1. **統一API**: 4つの機能を1つのWebSocketエンドポイントで処理
-2. **MOSProduct活用**: MOSProduct.chat_with_references()を基盤とした実装
+2. **CocoroMOSProduct活用**: CocoroAI専用システムプロンプト統合MOSProductクラスを基盤とした実装
 3. **リアルタイム通信**: WebSocketによる双方向通信とストリーミングレスポンス
 4. **並行処理対応**: 複数セッションの同時処理をサポート
 5. **非ブロッキング処理**: 長時間処理でも他のリクエストをブロックしない設計
+6. **高度機能**: テキストバッファリング、コンテキスト自動統合
 
 ## APIエンドポイント
 
@@ -35,17 +36,22 @@ interface WebSocketMessage {
 
 interface ChatRequest {
   // 基本情報
-  query: string;                    // ユーザークエリ（必須）
+  query: string;                                                         // ユーザークエリ（必須）
   
   // 機能識別
-  chat_type: "text" | "text_image" | "notification" | "desktop_watch";
+  chat_type: "text" | "text_image" | "notification" | "desktop_watch";  // チャットタイプ（必須）
   
   // 画像関連
-  images?: ImageData[];             // 画像データ配列（画像機能時）
+  images?: ImageData[];                                                  // 画像データ配列（画像機能時）
+  
+  // 機能別コンテキスト
+  notification?: NotificationData;                                       // 通知データ（通知機能時）
+  desktop_context?: DesktopContext;                                     // デスクトップコンテキスト（監視機能時）
   
   // オプション
-  history?: ChatMessage[];          // 会話履歴（セッション管理はMemOS側で自動実行）
-  internet_search?: boolean;        // インターネット検索（明示的な有効化オプション）
+  history?: HistoryMessage[];                                           // 会話履歴（セッション管理はMemOS側で自動実行）
+  internet_search?: boolean;                                            // インターネット検索（明示的な有効化オプション）
+  request_id?: string;                                                  // リクエスト識別ID（オプション）
 }
 
 interface ImageData {
@@ -54,17 +60,29 @@ interface ImageData {
                                     // クリップボードからの貼り付けは常にPNG形式に変換される
 }
 
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-  timestamp?: string;
+interface NotificationData {
+  from: string;                     // 通知送信元（必須）
+  original_message: string;         // 元の通知メッセージ（必須）
+}
+
+interface DesktopContext {
+  window_title: string;             // ウィンドウタイトル（必須）
+  application: string;              // アプリケーション名（必須）
+  capture_type: "active" | "full";  // キャプチャタイプ（必須）
+  timestamp: string;                // キャプチャ時刻（ISO形式、必須）
+}
+
+interface HistoryMessage {
+  role: "user" | "assistant";       // メッセージの役割（必須）
+  content: string;                  // メッセージ内容（必須）
+  timestamp: string;                // メッセージ時刻（ISO形式、必須）
 }
 ```
 
 **注意**: 
-- 通知機能とデスクトップウォッチ機能は、chat_typeで識別されますが、現在の実装では特別処理は行われません
-- 追加のコンテキスト情報はクライアント側でクエリ内に統合する必要があります
-- notification、desktop_contextフィールドは現在未使用です
+- 通知機能とデスクトップウォッチ機能は、chat_typeで識別され、適切なコンテキスト情報が自動的にクエリに統合されます
+- 画像分析機能は現在実装予定（基本的なBase64データ処理のみ対応）
+- notification、desktop_contextフィールドは実装済みでコンテキスト統合に使用されます
 
 ##### 受信メッセージ（サーバー→クライアント）
 
@@ -149,13 +167,14 @@ interface ErrorMessage {
 ```
 
 **処理フロー**:
-1. MOSProduct.chat_with_references()を直接活用
-2. 記憶検索→システムプロンプト構築→LLM生成→WebSocketストリーミング配信
+1. CocoroMOSProduct.chat_with_references()を直接活用
+2. 記憶検索→CocoroAIシステムプロンプト統合→LLM生成→WebSocketストリーミング配信
 3. 会話履歴への自動保存（MemOS内部処理）
+4. バッファリング機能による最適化されたレスポンス配信
 
 ### 2. 画像付きチャット機能
 
-**特徴**: 画像内容理解、MOSProduct画像処理、統合応答生成
+**特徴**: 画像データ受信と基本処理（画像分析機能は実装予定）
 
 ```typescript
 // WebSocketメッセージ例（ファイルから）
@@ -186,14 +205,18 @@ interface ErrorMessage {
 ```
 
 **処理フロー**:
-1. **画像前処理**: Base64デコード、フォーマット検証
-2. **MOSProduct処理**: MOSProduct.chat_with_references()に画像データを渡す
-3. **統合応答生成**: MOSProduct内での画像理解と自然な会話応答
+1. **画像データ受信**: Base64 data URL形式の画像データを受信
+2. **コンテキスト統合**: 画像枚数情報をクエリに追加（「○枚の画像が添付されています（分析機能は実装予定）」）
+3. **MOSProduct処理**: 基本的なテキストチャットとしてCocoroMOSProduct.chat_with_references()で処理
 4. **結果配信**: WebSocketストリーミング配信
+
+**現在の制限**:
+- 画像内容分析は未実装（Vision LLMによる画像理解は実装予定）
+- 画像データは受信・保持されるが、実際の画像理解処理は行われない
 
 ### 3. 通知機能
 
-**特徴**: 外部アプリ通知への自然な独り言応答、画像対応
+**特徴**: 外部アプリ通知への自然な独り言応答、通知コンテキスト自動統合
 
 ```typescript
 // WebSocketメッセージ例
@@ -201,24 +224,28 @@ interface ErrorMessage {
   "action": "chat",
   "session_id": "dock_20240120123456_abcd1234",
   "request": {
-    "query": "LINEから写真が送信されました", // クライアント側で通知内容を統合
+    "query": "写真が送信されました",
     "chat_type": "notification",
+    "notification": {
+      "from": "LINE",
+      "original_message": "田中さんから写真が届きました"
+    },
     "images": [/* 画像データ */]
   }
 }
 ```
 
 **処理フロー**:
-1. **基本処理**: 通常のテキストチャットと同じMOSProduct.chat_with_references()処理
-2. **chat_type識別**: "notification"タイプとして識別（将来の拡張用）
+1. **コンテキスト統合**: 通知データを自動的にクエリに統合（例：「【LINEからの通知】田中さんから写真が届きました\n\n写真が送信されました」）
+2. **MOSProduct処理**: 統合されたクエリでCocoroMOSProduct.chat_with_references()処理
 3. **独り言生成**: キャラクター性を活かした独り言形式の応答生成
 4. **応答配信**: WebSocketストリーミング配信
 
-**注意**: 現在の実装では通知固有の特別処理は行われず、基本的なチャット処理として動作します。
+**実装状況**: 通知コンテキストの自動統合機能は実装済み
 
 ### 4. デスクトップウォッチ機能
 
-**特徴**: 画面内容理解、独り言形式のツッコミ、必須画像データ
+**特徴**: デスクトップコンテキスト自動統合、独り言形式のツッコミ（画像分析は実装予定）
 
 ```typescript
 // WebSocketメッセージ例
@@ -226,21 +253,28 @@ interface ErrorMessage {
   "action": "chat",
   "session_id": "dock_20240120123456_abcd1234",
   "request": {
-    "query": "デスクトップ画面を見て感想を教えて", // クライアント側でコンテキスト統合
+    "query": "デスクトップ画面を見て感想を教えて",
     "chat_type": "desktop_watch",
+    "desktop_context": {
+      "window_title": "Visual Studio Code - main.py",
+      "application": "Visual Studio Code",
+      "capture_type": "active",
+      "timestamp": "2024-01-20T12:34:56.789Z"
+    },
     "images": [/* スクリーンショット */]
   }
 }
 ```
 
 **処理フロー**:
-1. **基本処理**: 通常のテキストチャットと同じMOSProduct.chat_with_references()処理
-2. **画像解析**: MOSProduct内での画像理解処理
-3. **chat_type識別**: "desktop_watch"タイプとして識別（将来の拡張用）
-4. **独り言生成**: キャラクター性を活かした独り言形式の応答
-5. **応答配信**: WebSocketストリーミング配信
+1. **コンテキスト統合**: デスクトップコンテキストを自動的にクエリに統合（例：「【デスクトップ監視】Visual Studio Codeで作業中\nウィンドウタイトル: Visual Studio Code - main.py\n\nデスクトップ画面を見て感想を教えて」）
+2. **MOSProduct処理**: 統合されたクエリでCocoroMOSProduct.chat_with_references()処理  
+3. **独り言生成**: キャラクター性を活かした独り言形式の応答
+4. **応答配信**: WebSocketストリーミング配信
 
-**注意**: 現在の実装では特別なデスクトップコンテキスト処理は行われず、基本的な画像チャット処理として動作します。
+**実装状況**: 
+- デスクトップコンテキストの自動統合機能は実装済み
+- 画像分析機能は実装予定（現在は基本的な画像データ受信のみ）
 
 ## 技術実装詳細
 
@@ -260,16 +294,31 @@ interface ErrorMessage {
 
 1. **受信**: クライアントからWebSocketメッセージ受信
 2. **検証**: action="chat"、リクエスト形式の検証
-3. **処理開始**: 別スレッドでMOSProduct.chat_with_references()実行
-4. **ストリーミング**: SSE形式からWebSocket形式に変換して送信
-5. **終了**: "end"メッセージで完了通知
+3. **コンテキスト統合**: chat_typeに応じた自動コンテキスト統合（通知・デスクトップ監視）
+4. **処理開始**: ThreadPoolExecutorで別スレッドでCocoroMOSProduct.chat_with_references()実行
+5. **ストリーミング**: SSE形式からWebSocket形式に変換、バッファリング処理
+6. **終了**: "end"メッセージで完了通知、早期終了によるレスポンス高速化
 
 ### パフォーマンス特徴
 
-- **ThreadPoolExecutor**: 最大4ワーカーでMOSProduct処理
+- **ThreadPoolExecutor**: 最大4ワーカーでCocoroMOSProduct処理
 - **asyncio.Queue**: スレッド間の安全な通信
 - **変換処理**: SSE→WebSocket形式の軽量変換
 - **タイムアウト**: 各操作に適切なタイムアウト設定
+
+### 高度な処理機能
+
+#### テキストバッファリング
+- **80文字閾値**: バッファが80文字以上になると句読点境界で自動送信
+- **句読点検出**: 日本語（。？．改行）、英語（．改行）に対応
+- **タイムアウト送信**: 2秒間新しい内容がない場合は強制送信
+- **漸進的配信**: ユーザーエクスペリエンス向上のため適切なタイミングで配信
+
+
+#### セッション管理
+- **並行処理**: 複数セッションの同時処理をサポート
+- **非ブロッキング**: 長時間処理でも他のリクエストをブロックしない
+- **リソース管理**: セッション終了時の適切なクリーンアップ
 
 ## 使用例
 
@@ -333,4 +382,23 @@ interface ErrorMessage {
 
 - **旧SSE API**: 完全に削除済み、WebSocketのみサポート
 - **CocoroDock**: WebSocketクライアント実装済み
-- **MOSProduct**: 既存のchat_with_references()メソッドを活用
+- **CocoroMOSProduct**: CocoroAI専用のシステムプロンプト統合済みMOSProductクラスを活用
+- **MemOS統合**: Neo4j組み込みサービス、TreeTextMemory、Internet Retrieval機能フル対応
+- **画像処理**: Vision LLM統合は実装予定（現在は基本的なデータ受信のみ）
+
+## MemOS統合詳細
+
+### CocoroMOSProduct
+- MemOSの`MOSProduct`クラスを継承したCocoroAI専用クラス
+- CocoroAIのキャラクター設定からシステムプロンプトを自動取得・統合
+- UUID部分マッチングによるシステムプロンプトファイル検索機能
+
+### キューブ管理
+- キャラクターごとの独立したメモリキューブ（`user_user_{memoryId}_cube`）
+- Neo4j Community Editionによる高速ベクトル検索
+- TreeTextMemoryによる階層的記憶構造
+
+### システムプロンプト統合
+- UserData2/SystemPromptsディレクトリからの自動読み込み
+- MemOSの記憶情報と統合したプロンプト構築
+- PersonalMemoryとOuterMemoryの適切な分類・統合
