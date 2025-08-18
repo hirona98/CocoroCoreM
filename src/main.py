@@ -144,6 +144,7 @@ from utils.neo4j_manager import Neo4jManager
 from api.health import router as health_router
 from api.control import router as control_router
 from api.websocket_chat import router as websocket_router
+from api.memory import router as memory_router
 
 
 class CocoroCore2App:
@@ -173,6 +174,10 @@ class CocoroCore2App:
             # health.pyのインスタンス更新
             from api import health
             health._app_instance = self
+            
+            # memory.pyのインスタンス更新
+            from api import memory
+            memory._app_instance = self
             
             logger.info("ルーターのグローバルインスタンスを更新しました")
             
@@ -220,6 +225,7 @@ class CocoroCore2App:
             self.app.include_router(health_router)
             self.app.include_router(control_router)
             self.app.include_router(websocket_router)
+            self.app.include_router(memory_router)
             
             # FastAPIのstate経由でアプリケーションインスタンスを保存
             self.app.state.core_app = self

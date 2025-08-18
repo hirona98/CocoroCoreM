@@ -478,6 +478,118 @@ class CocoroProductWrapper:
             logger.error(f"全記憶削除エラー: {e}")
             raise
     
+    def get_character_list(self) -> List[Dict]:
+        """キャラクター（キューブ）一覧取得"""
+        try:
+            # ユーザー情報からアクセス可能なキューブを取得
+            user_info = self.mos_product.get_user_info("user")
+            accessible_cubes = user_info.get("accessible_cubes", [])
+            
+            characters = []
+            for cube_id in accessible_cubes:
+                # キューブIDからmemoryIdを抽出
+                # "user_user_{memoryId}_cube" → memoryId
+                if cube_id.startswith("user_user_") and cube_id.endswith("_cube"):
+                    memory_id = cube_id[10:-5]  # "user_user_"と"_cube"を除去
+                    
+                    characters.append({
+                        "memory_id": memory_id,
+                        "memory_name": memory_id.capitalize(),  # 基本的な大文字化
+                        "role": "character", 
+                        "created": True
+                    })
+            
+            logger.info(f"キャラクター一覧取得: {len(characters)}件")
+            return characters
+            
+        except Exception as e:
+            logger.error(f"キャラクター一覧取得エラー: {e}")
+            raise
+
+    def get_character_memory_stats(self, memory_id: str) -> Dict:
+        """特定キャラクターの記憶統計取得"""
+        try:
+            # キューブIDを生成
+            cube_id = f"user_user_{memory_id}_cube"
+            
+            # 全記憶を取得してキューブ別にフィルタリング
+            all_memories = self.mos_product.get_all(user_id="user")
+            
+            # 特定のキューブの記憶のみをフィルタリング
+            cube_memories = [mem for mem in all_memories 
+                            if mem.get("mem_cube_id") == cube_id]
+            
+            # 記憶タイプ別統計計算
+            text_memories = len([m for m in cube_memories 
+                               if m.get("memory_type") == "PersonalMemory"])
+            activation_memories = len([m for m in cube_memories 
+                                     if m.get("memory_type") == "ActivationMemory"])
+            parametric_memories = len([m for m in cube_memories 
+                                     if m.get("memory_type") == "ParametricMemory"])
+            
+            # 最終更新日時を取得（最新の記憶から）
+            last_updated = None
+            if cube_memories:
+                # 記憶リストから最新のタイムスタンプを取得
+                timestamps = []
+                for mem in cube_memories:
+                    if hasattr(mem, 'timestamp') and mem.timestamp:
+                        timestamps.append(mem.timestamp)
+                    elif hasattr(mem, 'created_at') and mem.created_at:
+                        timestamps.append(mem.created_at)
+                
+                if timestamps:
+                    last_updated = max(timestamps)
+            
+            stats = {
+                "total_memories": len(cube_memories),
+                "text_memories": text_memories,
+                "activation_memories": activation_memories,
+                "parametric_memories": parametric_memories,
+                "last_updated": last_updated,
+                "cube_id": cube_id
+            }
+            
+            logger.info(f"キャラクター記憶統計取得: {memory_id}, 総数: {stats['total_memories']}")
+            return stats
+            
+        except Exception as e:
+            logger.error(f"キャラクター記憶統計取得エラー: {memory_id}, {e}")
+            raise
+
+    def delete_character_memories(self, memory_id: str) -> Dict:
+        """特定キャラクターの記憶削除"""
+        try:
+            # キューブIDを生成
+            cube_id = f"user_user_{memory_id}_cube"
+            
+            # 削除前の統計を取得
+            stats_before = self.get_character_memory_stats(memory_id)
+            
+            # 特定のキューブの記憶をクリア
+            cube = self.mos_product.user_instances.get("user", {}).get("mem_cubes", {}).get(cube_id)
+            if cube:
+                cube.clear_all_memories()
+                logger.info(f"キャラクター '{memory_id}' のメモリキューブ {cube_id} の記憶をクリアしました")
+                
+                # 削除結果を返す
+                return {
+                    "success": True,
+                    "deleted_count": stats_before["total_memories"],
+                    "details": {
+                        "text_memories": stats_before["text_memories"],
+                        "activation_memories": stats_before["activation_memories"],
+                        "parametric_memories": stats_before["parametric_memories"]
+                    }
+                }
+            else:
+                logger.warning(f"キャラクター '{memory_id}' のメモリキューブが見つかりません: {cube_id}")
+                raise ValueError(f"キャラクター '{memory_id}' のメモリキューブが見つかりません")
+                
+        except Exception as e:
+            logger.error(f"キャラクター記憶削除エラー: {memory_id}, {e}")
+            raise
+    
     def get_system_prompt(self) -> Optional[str]:
         """システムプロンプトを取得"""
         if self.system_prompt_path and self.system_prompt_path.exists():

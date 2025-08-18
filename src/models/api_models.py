@@ -107,3 +107,50 @@ class ChatRequest(BaseModel):
     history: Optional[List[HistoryMessage]] = Field(default=None, description="会話履歴")
     internet_search: Optional[bool] = Field(default=False, description="インターネット検索有効化")
     request_id: Optional[str] = Field(default=None, description="リクエスト識別ID")
+
+
+# ===========================================
+# キャラクター別メモリ管理API用モデル定義
+# ===========================================
+
+class CharacterMemoryInfo(BaseModel):
+    """キャラクターメモリ情報"""
+    memory_id: str = Field(..., description="メモリID（キャラクターのmemoryId）")  
+    memory_name: str = Field(..., description="キャラクター名")
+    role: str = Field("character", description="役割（character固定）")
+    created: bool = Field(True, description="作成状態")
+
+
+class CharacterListResponse(BaseModel):
+    """キャラクター一覧レスポンス - CocoroDock互換"""
+    status: str = Field("success", description="ステータス")
+    message: str = Field("キャラクター一覧を取得しました", description="メッセージ")
+    data: List[CharacterMemoryInfo] = Field(default_factory=list, description="キャラクター一覧")
+
+
+class CharacterMemoryStatsResponse(BaseModel):
+    """キャラクター記憶統計レスポンス - CocoroDock互換"""
+    memory_id: str = Field(..., description="メモリID")
+    total_memories: int = Field(0, description="総記憶数")
+    text_memories: int = Field(0, description="テキスト記憶数") 
+    activation_memories: int = Field(0, description="アクティベーション記憶数")
+    parametric_memories: int = Field(0, description="パラメトリック記憶数")
+    last_updated: Optional[datetime] = Field(None, description="最終更新日時")
+    cube_id: str = Field("", description="キューブID")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="取得時刻")
+
+
+class MemoryDeleteDetails(BaseModel):
+    """メモリ削除詳細"""
+    text_memories: int = Field(0, description="削除されたテキスト記憶数")
+    activation_memories: int = Field(0, description="削除されたアクティベーション記憶数") 
+    parametric_memories: int = Field(0, description="削除されたパラメトリック記憶数")
+
+
+class CharacterMemoryDeleteResponse(BaseModel):
+    """キャラクター記憶削除レスポンス - CocoroDock互換"""
+    status: str = Field("success", description="ステータス")
+    message: str = Field("記憶を削除しました", description="メッセージ")
+    deleted_count: int = Field(0, description="削除された記憶総数")
+    details: MemoryDeleteDetails = Field(default_factory=MemoryDeleteDetails, description="削除詳細")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="削除時刻")
