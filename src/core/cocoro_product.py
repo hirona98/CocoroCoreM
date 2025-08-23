@@ -376,12 +376,13 @@ class CocoroProductWrapper:
         - ストリーミング終了シグナル（"type": "end"）を検出したら即座に終了
         - MemOSの記憶保存処理（約2秒）を待たずに応答を返す
         - 記憶保存はMemOS内部で非同期に継続される
+        - 会話履歴はMemOSの自動履歴管理(user_chat_histories)を使用
         
         Args:
             query: ユーザークエリ
             cube_id: メモリキューブID
             user_id: ユーザーID（省略時は現在のユーザー）
-            history: 会話履歴
+            history: 会話履歴（注意: このパラメータは無視され、MemOSの自動管理が使用される）
             internet_search: インターネット検索を有効にするか
             
         Yields:
@@ -393,11 +394,11 @@ class CocoroProductWrapper:
         try:
             # CocoroMOSProduct.chat_with_referencesによる非同期記憶保存処理
             # 記憶保存はバックグラウンドで実行され、レスポンス遅延なし
+            # 注意: historyパラメータは無視し、MemOSの自動履歴管理(user_chat_histories)を使用
             for chunk in self.mos_product.chat_with_references(
                 query=query,
                 user_id=user_id,
                 cube_id=cube_id,
-                history=history,
                 internet_search=internet_search and self.cocoro_config.enable_internet_retrieval
             ):
                 yield chunk

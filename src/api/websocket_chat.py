@@ -221,7 +221,14 @@ class WebSocketChatManager:
             
             # バックグラウンドでMOSProduct処理を実行
             def mos_product_worker():
-                """別スレッドでMOSProduct処理（完全にブロッキング分離）"""
+                """
+                別スレッドでMOSProduct処理（完全にブロッキング分離）
+                
+                高速レスポンス化のための修正内容：
+                - オリジナルMemOS: LLM応答生成 → 長期記憶保存完了 → "type":"end"送信
+                - 修正版: LLM応答生成 → "type":"end"送信 → 記憶保存は非同期継続
+                """
+                full_response = ""  # ストリーミングで分割されたアシスタントの回答を蓄積・復元
                 try:
                     cube_id = app.cocoro_product.get_current_cube_id()
                     
@@ -233,10 +240,20 @@ class WebSocketChatManager:
                         query=enhanced_query,
                         user_id="user",
                         cube_id=cube_id,
-                        history=request_data.get("history"),
                         internet_search=request_data.get("internet_search", False)
                     ):
                         chunk_count += 1
+                        
+                        # アシスタントの回答を収集（会話履歴更新のため）
+                        # MemOSは応答をストリーミングで分割送信するため、完全な回答を再構築する必要
+                        if '"type": "text"' in sse_chunk:
+                            try:
+                                import json
+                                json_data = json.loads(sse_chunk[6:].strip())  # "data: " プレフィックス除去
+                                if json_data.get("type") == "text":
+                                    full_response += json_data.get("data", "")
+                            except:
+                                pass  # JSON解析エラーは無視（ストリーミングの途中で不完全なデータが来る可能性）
                         
                         # デバッグ出力
                         self._log_chunk_debug(sse_chunk, chunk_count)
@@ -251,9 +268,38 @@ class WebSocketChatManager:
                             logger.error(f"キュー送信エラー: {queue_error}")
                             break
                         
-                        # 終了シグナルログ出力（breakしない - 記憶保存処理継続）
+                        # ストリーミング終了シグナル検出（但しbreakしない）
+                        # 理由: 高速レスポンス化のため、MemOSの長期記憶保存完了を待たずに応答完了
                         if '"type": "end"' in sse_chunk:
                             logger.info(f"MOSProduct ストリーミング完了: session_id={session_id}, チャンク数={chunk_count} - 記憶保存処理継続中")
+                            
+                            # 【重要】高速レスポンス化の副作用対策
+                            # 問題: MemOSの会話履歴更新も非同期になり、次回リクエスト時に文脈が失われる
+                            # 解決: 会話履歴のみ即座に手動更新（長期記憶は引き続きMemOSが非同期処理）
+                            try:
+                                if full_response.strip():
+                                    user_id = "user"  # CocoroCore2では固定ユーザーIDを使用
+                                    
+                                    # MemOSの会話履歴マネージャーに直接アクセス
+                                    if user_id not in app.cocoro_product.mos_product.chat_history_manager:
+                                        app.cocoro_product.mos_product._register_chat_history(user_id)
+                                    
+                                    chat_history = app.cocoro_product.mos_product.chat_history_manager[user_id]
+                                    
+                                    # 会話履歴に即座追加（MemOSのchat_history.chat_historyと同じ形式）
+                                    # 注意: MemOSは長期記憶（TreeTextMemory）のみ更新し、
+                                    #      短期履歴（chat_history.chat_history）は更新しないため、
+                                    #      CocoroCore2での明示的な短期履歴更新は必須（重複なし）
+                                    chat_history.chat_history.append({"role": "user", "content": enhanced_query})
+                                    chat_history.chat_history.append({"role": "assistant", "content": full_response.strip()})
+                                    
+                                    # メモリ効率のため履歴を最新20件（10ターン）に制限
+                                    if len(chat_history.chat_history) > 20:
+                                        chat_history.chat_history = chat_history.chat_history[-20:]
+                                    
+                                    logger.info(f"即座会話履歴更新完了: session_id={session_id}, 履歴件数={len(chat_history.chat_history)}")
+                            except Exception as history_error:
+                                logger.error(f"即座会話履歴更新エラー: {history_error}", exc_info=True)
                             
                 except Exception as e:
                     logger.error(f"MOSProduct処理エラー: {e}", exc_info=True)
