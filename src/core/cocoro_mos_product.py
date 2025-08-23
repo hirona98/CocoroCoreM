@@ -2,12 +2,12 @@
 CocoroAI専用MOSProduct実装
 
 MemOSのMOSProductクラスを継承し、CocoroAIのシステムプロンプトを使用するようカスタマイズ
+動的プロンプト置換により、外部ライブラリを変更せずに全MemOS機能を日本語化
 """
 
 import logging
 import json
 from typing import Optional, Callable, List
-from pathlib import Path
 
 from memos.mem_os.product import MOSProduct
 from memos.memories.textual.item import TextualMemoryItem
@@ -16,11 +16,29 @@ from memos.mem_os.utils.format_utils import clean_json_response
 from .cocoro_prompts import (
     COCORO_MEMORY_INSTRUCTION,
     COCORO_SUGGESTION_PROMPT_JP,
+    # Tree Reorganize Prompts
+    REORGANIZE_PROMPT_JP,
+    DOC_REORGANIZE_PROMPT_JP,
+    LOCAL_SUBCLUSTER_PROMPT_JP,
+    PAIRWISE_RELATION_PROMPT_JP,
+    INFER_FACT_PROMPT_JP,
+    AGGREGATE_PROMPT_JP,
+    REDUNDANCY_MERGE_PROMPT_JP,
+    MEMORY_RELATION_DETECTOR_PROMPT_JP,
+    MEMORY_RELATION_RESOLVER_PROMPT_JP,
+    # Memory Scheduler Prompts
+    INTENT_RECOGNIZING_PROMPT_JP,
+    MEMORY_RERANKING_PROMPT_JP,
+    QUERY_KEYWORDS_EXTRACTION_PROMPT_JP,
+    # Memory Reader Prompts
+    SIMPLE_STRUCT_MEM_READER_PROMPT_JP,
+    SIMPLE_STRUCT_DOC_READER_PROMPT_JP,
+    SIMPLE_STRUCT_MEM_READER_EXAMPLE_JP,
+    # MOS Core Prompts
     COT_DECOMPOSE_PROMPT_JP,
     SYNTHESIS_PROMPT_JP,
     QUERY_REWRITING_PROMPT_JP
 )
-from .cocoro_mem_reader import CocoroMemReader
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +47,8 @@ class CocoroMOSProduct(MOSProduct):
     """
     CocoroAI専用MOSProduct
     
-    MemOSのMOSProductを継承し、CocoroAIのシステムプロンプト機能を統合
+    MemOSのMOSProductを継承し、動的プロンプト置換により
+    全MemOS機能を日本語化してCocoroAIシステムと統合
     """
     
     def __init__(self, default_config=None, max_user_instances=1, system_prompt_provider: Optional[Callable[[], Optional[str]]] = None):
@@ -41,15 +60,65 @@ class CocoroMOSProduct(MOSProduct):
             max_user_instances: 最大ユーザーインスタンス数
             system_prompt_provider: CocoroAIシステムプロンプト取得関数
         """
+        # MemOS全体のプロンプトを日本語版に置換
+        self._replace_memos_prompts_with_japanese()
+        
         super().__init__(default_config=default_config, max_user_instances=max_user_instances)
         self.system_prompt_provider = system_prompt_provider
-        
-        # カスタムメモリリーダーを初期化
-        if hasattr(self, 'config') and hasattr(self.config, 'mem_reader'):
-            self.mem_reader = CocoroMemReader(self.config.mem_reader.config)
-            logger.info("CocoroMemReaderを使用してメモリリーダーを初期化")
-        
         logger.info("CocoroMOSProduct初期化完了")
+    
+    def _replace_memos_prompts_with_japanese(self):
+        """
+        MemOSの全プロンプトテンプレートを日本語版に動的置換
+        
+        外部ライブラリを変更せずに、実行時にMemOS内部で使用される
+        全てのプロンプトを日本語版に置き換えることで完全日本語化を実現
+        """
+        try:
+            # Tree Reorganize Prompts（記憶再編成機能）
+            import memos.templates.tree_reorganize_prompts as tree_prompts
+            tree_prompts.REORGANIZE_PROMPT = REORGANIZE_PROMPT_JP
+            tree_prompts.DOC_REORGANIZE_PROMPT = DOC_REORGANIZE_PROMPT_JP
+            tree_prompts.LOCAL_SUBCLUSTER_PROMPT = LOCAL_SUBCLUSTER_PROMPT_JP
+            tree_prompts.PAIRWISE_RELATION_PROMPT = PAIRWISE_RELATION_PROMPT_JP
+            tree_prompts.INFER_FACT_PROMPT = INFER_FACT_PROMPT_JP
+            tree_prompts.AGGREGATE_PROMPT = AGGREGATE_PROMPT_JP
+            tree_prompts.REDUNDANCY_MERGE_PROMPT = REDUNDANCY_MERGE_PROMPT_JP
+            tree_prompts.MEMORY_RELATION_DETECTOR_PROMPT = MEMORY_RELATION_DETECTOR_PROMPT_JP
+            tree_prompts.MEMORY_RELATION_RESOLVER_PROMPT = MEMORY_RELATION_RESOLVER_PROMPT_JP
+            
+            # Memory Scheduler Prompts（記憶スケジューラー機能）
+            import memos.templates.mem_scheduler_prompts as scheduler_prompts
+            scheduler_prompts.INTENT_RECOGNIZING_PROMPT = INTENT_RECOGNIZING_PROMPT_JP
+            scheduler_prompts.MEMORY_RERANKING_PROMPT = MEMORY_RERANKING_PROMPT_JP
+            scheduler_prompts.QUERY_KEYWORDS_EXTRACTION_PROMPT = QUERY_KEYWORDS_EXTRACTION_PROMPT_JP
+            
+            # Memory Reader Prompts（記憶抽出機能）
+            import memos.templates.mem_reader_prompts as reader_prompts
+            reader_prompts.SIMPLE_STRUCT_MEM_READER_PROMPT = SIMPLE_STRUCT_MEM_READER_PROMPT_JP
+            reader_prompts.SIMPLE_STRUCT_DOC_READER_PROMPT = SIMPLE_STRUCT_DOC_READER_PROMPT_JP
+            reader_prompts.SIMPLE_STRUCT_MEM_READER_EXAMPLE = SIMPLE_STRUCT_MEM_READER_EXAMPLE_JP
+            
+            # MOS Core Prompts（コア機能）
+            import memos.templates.mos_prompts as mos_prompts
+            mos_prompts.COT_DECOMPOSE_PROMPT = COT_DECOMPOSE_PROMPT_JP
+            mos_prompts.SYNTHESIS_PROMPT = SYNTHESIS_PROMPT_JP
+            mos_prompts.QUERY_REWRITING_PROMPT = QUERY_REWRITING_PROMPT_JP
+            
+            # Scheduler用プロンプトマッピングも更新
+            if hasattr(scheduler_prompts, 'PROMPT_MAPPING'):
+                scheduler_prompts.PROMPT_MAPPING.update({
+                    "intent_recognizing": INTENT_RECOGNIZING_PROMPT_JP,
+                    "memory_reranking": MEMORY_RERANKING_PROMPT_JP,
+                    "query_keywords_extraction": QUERY_KEYWORDS_EXTRACTION_PROMPT_JP,
+                })
+                
+            logger.info("🎌 MemOS全機能のプロンプトを日本語版に置換完了")
+            
+        except ImportError as e:
+            logger.warning(f"MemOSモジュールのインポートに失敗: {e}")
+        except Exception as e:
+            logger.error(f"プロンプト置換中にエラーが発生: {e}", exc_info=True)
     
     def _build_enhance_system_prompt(
         self, user_id: str, memories_all: List[TextualMemoryItem]
@@ -57,12 +126,7 @@ class CocoroMOSProduct(MOSProduct):
         """
         CocoroAI専用システムプロンプト構築
         
-        Args:
-            user_id: ユーザーID
-            memories_all: 検索されたメモリアイテムリスト
-            
-        Returns:
-            str: 構築されたシステムプロンプト
+        CocoroAIのシステムプロンプト + 記憶機能指示 + メモリ情報を統合
         """
         # CocoroAIのシステムプロンプトを取得
         cocoro_prompt = None
@@ -75,7 +139,7 @@ class CocoroMOSProduct(MOSProduct):
         
         # フォールバック: CocoroAIプロンプトが取得できない場合は元のMemOSプロンプトを使用
         if not cocoro_prompt:
-            logger.error("CocoroAIプロンプト未設定")
+            logger.warning("CocoroAIプロンプト未設定、MemOSデフォルトプロンプトを使用")
             return super()._build_enhance_system_prompt(user_id, memories_all)
         
         # メモリ情報の追加処理（MemOSの標準フォーマットに従う）
@@ -146,82 +210,3 @@ class CocoroMOSProduct(MOSProduct):
         clean_response = clean_json_response(response)
         response_json = json.loads(clean_response)
         return response_json["query"]
-    
-    def query_rewrite(self, query: str, dialogue: str) -> dict:
-        """
-        クエリ書き換え機能（日本語プロンプト使用）
-        
-        Args:
-            query: 現在のクエリ
-            dialogue: 以前の対話内容
-            
-        Returns:
-            dict: 書き換え結果（former_dialogue_related, rewritten_question）
-        """
-        prompt = QUERY_REWRITING_PROMPT_JP.format(
-            dialogue=dialogue,
-            query=query
-        )
-        
-        messages = [{"role": "user", "content": prompt}]
-        response_text = self.chat_llm.generate(messages)
-        
-        try:
-            json_start = response_text.find("{")
-            response_text = response_text[json_start:]
-            response_text = response_text.replace("```", "").strip()
-            if response_text[-1] != "}":
-                response_text += "}"
-            response_json = json.loads(response_text)
-            return response_json
-        except json.JSONDecodeError as e:
-            logger.warning(
-                f"Failed to parse LLM response as JSON: {e}\nRaw response:\n{response_text}"
-            )
-            return {}
-    
-    def cot_decompose(self, query: str) -> dict:
-        """
-        Chain of Thought分解機能（日本語プロンプト使用）
-        
-        Args:
-            query: 分解対象のクエリ
-            
-        Returns:
-            dict: 分解結果（is_complex, sub_questions）
-        """
-        prompt = COT_DECOMPOSE_PROMPT_JP.format(query=query)
-        
-        messages = [{"role": "user", "content": prompt}]
-        response_text = self.chat_llm.generate(messages)
-        
-        try:
-            json_start = response_text.find("{")
-            response_text = response_text[json_start:]
-            response_text = response_text.replace("```", "").strip()
-            if response_text[-1] != "}":
-                response_text += "}"
-            response_json = json.loads(response_text)
-            return response_json
-        except json.JSONDecodeError as e:
-            logger.warning(
-                f"Failed to parse LLM response as JSON: {e}\nRaw response:\n{response_text}"
-            )
-            return {}
-    
-    def synthesis_response(self, qa_text: str) -> str:
-        """
-        情報合成機能（日本語プロンプト使用）
-        
-        Args:
-            qa_text: Q&Aペアのテキスト
-            
-        Returns:
-            str: 合成された回答
-        """
-        prompt = SYNTHESIS_PROMPT_JP.format(qa_text=qa_text)
-        
-        messages = [{"role": "user", "content": prompt}]
-        response_text = self.chat_llm.generate(messages)
-        
-        return response_text
