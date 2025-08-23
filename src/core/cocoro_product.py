@@ -391,8 +391,8 @@ class CocoroProductWrapper:
             user_id = self.current_user_id
         
         try:
-            # MOSProduct.chat_with_references による完全自動処理
-            # MOSProductのchat_with_referencesは通常のgeneratorを返すため、async forではなくfor文を使用
+            # CocoroMOSProduct.chat_with_referencesによる非同期記憶保存処理
+            # 記憶保存はバックグラウンドで実行され、レスポンス遅延なし
             for chunk in self.mos_product.chat_with_references(
                 query=query,
                 user_id=user_id,
@@ -401,11 +401,6 @@ class CocoroProductWrapper:
                 internet_search=internet_search and self.cocoro_config.enable_internet_retrieval
             ):
                 yield chunk
-                
-                # ストリーミング完了シグナルを検出したら終了
-                if '"type": "end"' in chunk:
-                    logger.info(f"ストリーミング終了シグナルを検出。早期終了します。cube_id={cube_id}")
-                    break
                 
         except Exception as e:
             logger.error(f"チャット処理エラー: {e}")

@@ -251,10 +251,9 @@ class WebSocketChatManager:
                             logger.error(f"キュー送信エラー: {queue_error}")
                             break
                         
-                        # 終了チェック
+                        # 終了シグナルログ出力（breakしない - 記憶保存処理継続）
                         if '"type": "end"' in sse_chunk:
-                            logger.info(f"MOSProduct処理完了: session_id={session_id}, チャンク数={chunk_count}")
-                            break
+                            logger.info(f"MOSProduct ストリーミング完了: session_id={session_id}, チャンク数={chunk_count} - 記憶保存処理継続中")
                             
                 except Exception as e:
                     logger.error(f"MOSProduct処理エラー: {e}", exc_info=True)
