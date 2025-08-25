@@ -450,30 +450,6 @@ class CocoroProductWrapper:
             logger.error(f"記憶統計取得エラー: {e}")
             raise
     
-    def delete_all_memories(self, user_id: str) -> bool:
-        """ユーザー（キューブではない、基本的にはuser固定）の全記憶削除"""
-        try:
-            # ユーザーのメモリキューブを取得
-            user_info = self.mos_product.get_user_info(user_id)
-            accessible_cubes = user_info.get("accessible_cubes", [])
-            
-            # 各キューブの記憶を削除
-            for cube_id in accessible_cubes:
-                try:
-                    # キューブ内の記憶をクリア
-                    cube = self.mos_product.user_instances.get(user_id, {}).get("mem_cubes", {}).get(cube_id)
-                    if cube:
-                        cube.clear_all_memories()
-                        logger.info(f"メモリキューブ {cube_id} の記憶をクリアしました")
-                except Exception as e:
-                    logger.warning(f"メモリキューブ {cube_id} のクリアに失敗: {e}")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"全記憶削除エラー: {e}")
-            raise
-    
     def get_character_list(self) -> List[Dict]:
         """キャラクター（キューブ）一覧取得"""
         try:
@@ -504,22 +480,115 @@ class CocoroProductWrapper:
 
 
     def delete_character_memories(self, memory_id: str) -> None:
-        """特定キャラクターの記憶削除"""
+        """特定キャラクターの完全削除（記憶データ + 設定ファイル + SQLiteレコード）"""
         try:
-            # キューブIDを生成
+            # 指定されたキャラクターのキューブIDを生成
             cube_id = f"user_user_{memory_id}_cube"
             
-            # 特定のキューブの記憶をクリア
-            cube = self.mos_product.user_instances.get("user", {}).get("mem_cubes", {}).get(cube_id)
-            if cube:
-                cube.clear_all_memories()
-                logger.info(f"キャラクター '{memory_id}' のメモリキューブ {cube_id} の記憶をクリアしました")
-            else:
-                logger.warning(f"キャラクター '{memory_id}' のメモリキューブが見つかりません: {cube_id}")
-                raise ValueError(f"キャラクター '{memory_id}' のメモリキューブが見つかりません")
+            # MemOSの記憶削除（Neo4jから削除）- キューブが存在しない場合はスキップ
+            try:
+                self.mos_product.delete_all(mem_cube_id=cube_id, user_id="user")
+                logger.info(f"Neo4jから記憶削除完了: {cube_id}")
+            except Exception as neo4j_error:
+                if "does not exist" in str(neo4j_error) or "not found" in str(neo4j_error).lower():
+                    logger.warning(f"キューブが既に存在しません: {cube_id} - 物理削除を続行")
+                else:
+                    raise  # 他のエラーは再発生
+            
+            # キューブディレクトリとconfig.jsonファイルの物理削除
+            self._delete_cube_files(cube_id)
+            
+            # SQLiteデータベース（memos_users.db）からキューブレコードを削除
+            self._delete_cube_from_database(cube_id)
+            
+            # user_configs内のAPIキーを空文字でクリア（セキュリティ対策/とりあえず）
+            self._clear_api_keys_from_user_configs()
+            
+            logger.info(f"キャラクター '{memory_id}' の完全削除完了")
                 
         except Exception as e:
             logger.error(f"キャラクター記憶削除エラー: {memory_id}, {e}")
+            raise
+    
+    def _delete_cube_files(self, cube_id: str) -> None:
+        """キューブのファイル・ディレクトリを物理削除"""
+        import shutil
+        
+        try:
+            user_data_dir = self._get_user_data_directory()
+            cube_path = user_data_dir / "Memory" / "cubes" / cube_id
+            
+            if cube_path.exists():
+                shutil.rmtree(cube_path)
+                logger.info(f"キューブディレクトリ削除完了: {cube_path}")
+            else:
+                logger.warning(f"キューブディレクトリが見つかりません: {cube_path}")
+                
+        except Exception as e:
+            logger.error(f"キューブファイル削除エラー: {cube_id}, {e}")
+            raise
+    
+    def _delete_cube_from_database(self, cube_id: str) -> None:
+        """SQLiteデータベースからキューブレコードを削除"""
+        import sqlite3
+        
+        try:
+            user_data_dir = self._get_user_data_directory()
+            db_path = user_data_dir / "Memory" / "memos_users.db"
+            
+            if db_path.exists():
+                with sqlite3.connect(str(db_path)) as conn:
+                    # cubesテーブルからレコード削除
+                    conn.execute("DELETE FROM cubes WHERE cube_id = ?", (cube_id,))
+                    # user_cube_associationテーブルからも関連レコード削除
+                    conn.execute("DELETE FROM user_cube_association WHERE cube_id = ?", (cube_id,))
+                    conn.commit()
+                    logger.info(f"SQLiteからキューブレコード削除完了: {cube_id}")
+            else:
+                logger.warning(f"SQLiteデータベースが見つかりません: {db_path}")
+                
+        except Exception as e:
+            logger.error(f"SQLiteキューブレコード削除エラー: {cube_id}, {e}")
+            raise
+    
+    def _clear_api_keys_from_user_configs(self) -> None:
+        """user_configs内のAPIキーを空文字でクリア（文字列置換）"""
+        import sqlite3
+        import datetime
+        import re
+        
+        try:
+            user_data_dir = self._get_user_data_directory()
+            db_path = user_data_dir / "Memory" / "memos_users.db"
+            
+            if not db_path.exists():
+                logger.warning(f"SQLiteデータベースが見つかりません: {db_path}")
+                return
+                
+            with sqlite3.connect(str(db_path)) as conn:
+                updated_at = datetime.datetime.now().isoformat()
+                
+                # Pythonで取得→正規表現置換→更新
+                cursor = conn.execute("SELECT config_data FROM user_configs WHERE user_id = ?", ("user",))
+                row = cursor.fetchone()
+                
+                if row:
+                    config_data = row[0]
+                    # api_keyの値を正規表現で全て空文字に置換
+                    # "api_key": "sk-proj-..." → "api_key": ""
+                    cleaned_config = re.sub(r'"api_key":\s*"[^"]*"', '"api_key": ""', config_data)
+                    
+                    conn.execute(
+                        "UPDATE user_configs SET config_data = ?, updated_at = ? WHERE user_id = ?",
+                        (cleaned_config, updated_at, "user")
+                    )
+                    conn.commit()
+                    logger.info("user_configs内の全api_keyをクリア完了")
+                else:
+                    logger.warning("user_configsにuser='user'のレコードが見つかりません")
+                    
+        except Exception as e:
+            logger.error(f"user_configsのAPIキークリアエラー: {e}")
             raise
     
     def get_system_prompt(self) -> Optional[str]:
