@@ -84,82 +84,57 @@ GET /api/mcp/tool-registration-log
 ---
 
 
-### キューブ記憶統計
 
-#### `GET /api/memory/user/{memory_id}/stats`
+### キャラクター記憶管理
 
-指定メモリキューブの記憶統計情報を取得します。
+#### キャラクター一覧取得
 
-**リクエスト**
-```
-GET /api/memory/user/listy/stats
-```
+**エンドポイント**: `GET /api/memory/characters`
 
-**レスポンス**
-```json
-{
-  "memory_id": "listy",
-  "cube_id": "user_user_listy_cube",
-  "total_memories": 150,
-  "text_memories": 120,
-  "activation_memories": 20,
-  "parametric_memories": 10,
-  "last_updated": "2025-01-01T11:30:00Z",
-  "timestamp": "2025-01-01T12:00:00Z"
-}
-```
-
----
-
-### キューブ記憶削除
-
-#### `DELETE /api/memory/user/{memory_id}/all`
-
-指定メモリキューブの全記憶を削除します。
+キャラクター（メモリキューブ）一覧を取得します。
 
 **リクエスト**
 ```
-DELETE /api/memory/user/listy/all
+GET /api/memory/characters
 ```
 
 **レスポンス**
 ```json
 {
   "status": "success",
-  "message": "listyの記憶を削除しました",
-  "timestamp": "2025-01-01T12:00:00Z"
-}
-```
-
----
-
-### キャラクターキューブリスト取得
-
-#### `GET /api/cubes`
-
-すべてのキャラクターキューブの一覧を取得します。
-
-**リクエスト**
-```
-GET /api/cubes
-```
-
-**レスポンス**
-```json
-{
-  "status": "success",
-  "message": "2つのメモリキューブを取得しました",
+  "message": "キャラクター一覧を取得しました",
   "data": [
     {
-      "memory_id": "miku",
-      "cube_id": "user_user_miku_cube",
-      "character_name": "初音ミク"
+      "memory_id": "listy",
+      "memory_name": "リスティー", 
+      "role": "character",
+      "created": true
     },
     {
-      "memory_id": "tsukuyomichan",
-      "cube_id": "user_user_tsukuyomichan_cube", 
-      "character_name": "つくよみちゃん"
+      "memory_id": "miku", 
+      "memory_name": "初音ミク",
+      "role": "character",
+      "created": true
     }
   ]
+}
+```
+
+#### キャラクター記憶削除
+
+**エンドポイント**: `DELETE /api/memory/character/{memory_id}/all`
+
+指定キャラクターの全記憶を削除します。
+
+**リクエスト例**
+```
+DELETE /api/memory/character/listy/all
+```
+
+**レスポンス**
+```json
+{
+  "status": "success",
+  "message": "記憶を削除しました"
 }
 ```

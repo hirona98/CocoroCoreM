@@ -15,9 +15,7 @@ from fastapi.responses import JSONResponse
 from models.api_models import (
     CharacterListResponse,
     CharacterMemoryInfo,
-    CharacterMemoryStatsResponse,
-    CharacterMemoryDeleteResponse,
-    MemoryDeleteDetails,
+    StandardResponse,
     ErrorResponse
 )
 
@@ -52,35 +50,8 @@ def _convert_character_list_to_response(characters_data: List[Dict]) -> Characte
     return CharacterListResponse(data=character_infos)
 
 
-def _convert_character_stats_to_response(stats_data: Dict, memory_id: str) -> CharacterMemoryStatsResponse:
-    """内部統計データを外部APIレスポンスに変換"""
-    return CharacterMemoryStatsResponse(
-        memory_id=memory_id,
-        total_memories=stats_data.get("total_memories", 0),
-        text_memories=stats_data.get("text_memories", 0),
-        activation_memories=stats_data.get("activation_memories", 0),
-        parametric_memories=stats_data.get("parametric_memories", 0),
-        last_updated=stats_data.get("last_updated"),
-        cube_id=stats_data.get("cube_id", ""),
-        timestamp=datetime.utcnow()
-    )
 
 
-def _convert_character_delete_result_to_response(delete_result: Dict, memory_id: str) -> CharacterMemoryDeleteResponse:
-    """削除結果データを削除レスポンスに変換"""
-    details = MemoryDeleteDetails(
-        text_memories=delete_result.get("details", {}).get("text_memories", 0),
-        activation_memories=delete_result.get("details", {}).get("activation_memories", 0),
-        parametric_memories=delete_result.get("details", {}).get("parametric_memories", 0)
-    )
-    
-    return CharacterMemoryDeleteResponse(
-        status="success",
-        message="記憶を削除しました",
-        deleted_count=delete_result.get("deleted_count", 0),
-        details=details,
-        timestamp=datetime.utcnow()
-    )
 
 
 @router.get("/memory/characters", response_model=CharacterListResponse)
@@ -115,55 +86,9 @@ async def get_memory_characters(app=Depends(get_core_app)):
         return JSONResponse(status_code=500, content=error_response.dict())
 
 
-@router.get("/memory/character/{memory_id}/stats", response_model=CharacterMemoryStatsResponse)
-async def get_character_memory_stats(
-    memory_id: str = Path(..., description="キャラクターのメモリID"),
-    app=Depends(get_core_app)
-):
-    """
-    キャラクター記憶統計情報取得
-    
-    指定されたキャラクター（メモリID）の記憶統計情報を取得
-    
-    Args:
-        memory_id: 統計取得対象のキャラクターメモリID
-        
-    Returns:
-        CharacterMemoryStatsResponse: キャラクター記憶統計情報
-    """
-    try:
-        logger.debug(f"キャラクター記憶統計取得開始: {memory_id}")
-        
-        # CocoroProductWrapperから統計データを取得
-        stats_data = app.cocoro_product.get_character_memory_stats(memory_id)
-        
-        # 外部APIレスポンス形式に変換
-        response = _convert_character_stats_to_response(stats_data, memory_id)
-        
-        logger.info(f"キャラクター記憶統計取得成功: {memory_id}, 総記憶数: {response.total_memories}")
-        return response
-        
-    except Exception as e:
-        logger.error(f"キャラクター記憶統計取得エラー: {memory_id}, {e}")
-        
-        # 特殊ケース: キャラクターが存在しない場合は空の統計を返す（CocoroDock互換）
-        if "not found" in str(e).lower() or "見つかりません" in str(e) or "存在しない" in str(e):
-            logger.info(f"キャラクターが存在しないため空の統計を返します: {memory_id}")
-            empty_stats = CharacterMemoryStatsResponse(
-                memory_id=memory_id,
-                cube_id=f"user_user_{memory_id}_cube"
-            )
-            return empty_stats
-        
-        error_response = ErrorResponse(
-            error="character_memory_stats_failed",
-            message=f"キャラクター記憶統計の取得に失敗しました: {memory_id}",
-            details={"memory_id": memory_id, "error": str(e)}
-        )
-        return JSONResponse(status_code=500, content=error_response.dict())
 
 
-@router.delete("/memory/character/{memory_id}/all", response_model=CharacterMemoryDeleteResponse)
+@router.delete("/memory/character/{memory_id}/all", response_model=StandardResponse)
 async def delete_character_memories(
     memory_id: str = Path(..., description="キャラクターのメモリID"),
     app=Depends(get_core_app)
@@ -177,19 +102,16 @@ async def delete_character_memories(
         memory_id: 削除対象のキャラクターメモリID
         
     Returns:
-        CharacterMemoryDeleteResponse: 削除結果
+        StandardResponse: 標準成功レスポンス
     """
     try:
         logger.info(f"キャラクター全記憶削除開始: {memory_id}")
         
         # CocoroProductWrapperで記憶削除実行
-        delete_result = app.cocoro_product.delete_character_memories(memory_id)
+        app.cocoro_product.delete_character_memories(memory_id)
         
-        # 削除結果レスポンス生成
-        response = _convert_character_delete_result_to_response(delete_result, memory_id)
-        
-        logger.info(f"キャラクター全記憶削除成功: {memory_id}, 削除数: {response.deleted_count}")
-        return response
+        logger.info(f"キャラクター全記憶削除成功: {memory_id}")
+        return StandardResponse(message="記憶を削除しました")
         
     except Exception as e:
         logger.error(f"キャラクター全記憶削除エラー: {memory_id}, {e}")
