@@ -236,9 +236,10 @@ class WebSocketChatManager:
                     
                     # MOSProductのストリーミング処理（同期処理）
                     chunk_count = 0
+                    current_user_id = app.cocoro_product.current_user_id  # 実際のユーザーIDを取得
                     for sse_chunk in app.cocoro_product.mos_product.chat_with_references(
                         query=enhanced_query,
-                        user_id="user",
+                        user_id=current_user_id,
                         cube_id=cube_id,
                         internet_search=request_data.get("internet_search", False)
                     ):
@@ -278,7 +279,7 @@ class WebSocketChatManager:
                             # 解決: 会話履歴のみ即座に手動更新（長期記憶は引き続きMemOSが非同期処理）
                             try:
                                 if full_response.strip():
-                                    user_id = "user"  # CocoroCore2では固定ユーザーIDを使用
+                                    user_id = current_user_id  # 実際のユーザーIDを使用
                                     
                                     # MemOSの会話履歴マネージャーに直接アクセス
                                     if user_id not in app.cocoro_product.mos_product.chat_history_manager:

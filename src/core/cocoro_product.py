@@ -83,8 +83,11 @@ class CocoroProductWrapper:
         self.image_analyzer = None
         self.message_generator = None
         
-        # 現在のユーザーIDを設定
-        self.current_user_id = "user"
+        # 現在のユーザーID（MemOSのuser_idパラメータ用）
+        current_character = cocoro_config.current_character
+        if not current_character or not current_character.memoryId:
+            raise RuntimeError("キャラクターのmemoryIdが設定されていません")
+        self.current_user_id = current_character.memoryId
         
         # 現在のキャラクターのキューブID（起動時に確定）
         self.current_cube_id: str = ""
@@ -170,7 +173,7 @@ class CocoroProductWrapper:
         """非同期初期化処理"""
         try:
             # ユーザーが未登録の場合は登録
-            users = self.mos_product.list_users() # CocoroAIでは"user"が一つのみ固定
+            users = self.mos_product.list_users() # キャラクター固有のユーザーIDを確認
             # usersはUserオブジェクトのリストなので属性でアクセス
             user_ids = [u.user_id if hasattr(u, 'user_id') else str(u) for u in users]
             if self.current_user_id not in user_ids:
@@ -201,8 +204,8 @@ class CocoroProductWrapper:
         if not current_character.memoryId:
             raise RuntimeError(f"キャラクター '{current_character.modelName}' のmemoryIdが設定されていません")
         
-        # キューブIDを生成・設定
-        self.current_cube_id = f"user_user_{current_character.memoryId}_cube"
+        # キューブIDを生成・設定（MOSProduct標準命名規則）
+        self.current_cube_id = f"{current_character.memoryId}_{current_character.memoryId}_cube"
         
         # 既存のキューブリストを取得
         existing_cubes = self.mos_product.user_manager.get_user_cubes(self.current_user_id)
@@ -215,7 +218,25 @@ class CocoroProductWrapper:
         
         if existing_cube and getattr(existing_cube, 'cube_path', None) is not None:
             # 既存キューブを使用（cube_pathが有効な場合のみ）
-            logger.info(f"既存キューブを使用: {self.current_cube_id} (キャラクター: {current_character.modelName})")
+            # ただし、MemOSのuser_cube_associationテーブルで権限を再確認
+            try:
+                # キューブへの登録を強制実行（権限が正しく設定されるように）
+                memory_types = ["text_mem"]
+                if self.cocoro_config.enable_activation_memory:
+                    memory_types.append("act_mem")
+                
+                # MemOSの内部権限システムで正しく関連付けられるように再登録
+                self.mos_product.register_mem_cube(
+                    mem_cube_name_or_path_or_object=existing_cube.cube_path,
+                    mem_cube_id=self.current_cube_id,
+                    user_id=self.current_user_id,
+                    memory_types=memory_types,
+                    default_config=None
+                )
+                logger.info(f"既存キューブを再登録して使用: {self.current_cube_id} (キャラクター: {current_character.modelName})")
+            except Exception as re_register_error:
+                logger.warning(f"既存キューブの再登録に失敗、新規作成します: {re_register_error}")
+                self._create_cube(current_character)
         else:
             # 新規作成またはcube_pathがNoneの場合は再作成
             if existing_cube:
@@ -226,7 +247,7 @@ class CocoroProductWrapper:
     
     def _create_cube(self, character):
         """キューブ作成処理"""
-        cube_name = f"{character.modelName}_{character.memoryId}_cube"
+        cube_name = f"{character.memoryId}_cube"
         
         # setting.jsonと同じUserData2ディレクトリにキューブデータを保存
         user_data_dir = self._get_user_data_directory()
@@ -268,7 +289,7 @@ class CocoroProductWrapper:
             "password": "password",
             "db_name": "neo4j",
             "use_multi_db": False,  # Community Editionでは必須
-            "user_name": self.current_user_id,  # 論理的分離用
+            "user_name": self.current_user_id,  # キャラクター別論理的分離
             "auto_create": False,
             "embedding_dimension": 1536  # text-embedding-3-small の次元
         }
@@ -350,10 +371,11 @@ class CocoroProductWrapper:
     def register_current_user(self):
         """ユーザーを登録"""
         try:
-            # CocoroAIはシングルユーザーシステムのため、user_nameは"user"に固定
+            # キャラクター別ユーザー登録
+            current_character = self.cocoro_config.current_character
             self.mos_product.user_register(
-                user_id="user",
-                user_name="user",  # 識別用なので何でも良い
+                user_id=self.current_user_id,
+                user_name=self.current_user_id,  # ユーザーIDと同じ値を使用
                 config=get_mos_config(self.cocoro_config)
             )
             
@@ -451,27 +473,29 @@ class CocoroProductWrapper:
             raise
     
     def get_character_list(self) -> List[Dict]:
-        """キャラクター（キューブ）一覧取得"""
+        """キャラクター（キューブ）一覧取得 - 記憶を持つ全MemoryIDを返す"""
         try:
-            # user_managerから直接キューブ一覧を取得
-            user_cubes = self.mos_product.user_manager.get_user_cubes("user")
+            # MOSProductから記憶を持つ全ユーザー（MemoryID）を取得
+            users = self.mos_product.list_users()
             
             characters = []
-            for cube in user_cubes:
-                if hasattr(cube, 'cube_id'):
-                    cube_id = cube.cube_id
-                    
-                    # キューブIDからmemoryIdを抽出
-                    if cube_id.startswith("user_user_") and cube_id.endswith("_cube"):
-                        memory_id = cube_id[10:-5]  # "user_user_"と"_cube"を除去
-                        characters.append({
-                            "memory_id": memory_id,
-                            "memory_name": memory_id.capitalize(),
-                            "role": "character", 
-                            "created": True
-                        })
+            for user in users:
+                # ユーザーIDを取得（Userオブジェクトの場合はuser_id属性、文字列の場合はそのまま）
+                user_id = user.user_id if hasattr(user, 'user_id') else str(user)
+                
+                # rootユーザーは除外
+                if user_id == "root":
+                    continue
+                
+                # MemoryIDとして使用（記憶管理でキャラクター名ではなくMemoryIDを表示）
+                characters.append({
+                    "memory_id": user_id,
+                    "memory_name": user_id,  # MemoryIDをそのまま名前として使用
+                    "role": "character", 
+                    "created": True
+                })
             
-            logger.info(f"キャラクター一覧取得: {len(characters)}件")
+            logger.info(f"記憶を持つMemoryID一覧取得: {len(characters)}件")
             return characters
             
         except Exception as e:
@@ -480,31 +504,37 @@ class CocoroProductWrapper:
 
 
     def delete_character_memories(self, memory_id: str) -> None:
-        """特定キャラクターの完全削除（記憶データ + 設定ファイル + SQLiteレコード）"""
+        """特定キャラクターの完全削除（記憶データ + 設定ファイル + SQLiteレコード + default_cube含む全キューブ）"""
         try:
-            # 指定されたキャラクターのキューブIDを生成
-            cube_id = f"user_user_{memory_id}_cube"
+            # user_idはmemory_idと同じ
+            user_id = memory_id
             
-            # MemOSの記憶削除（Neo4jから削除）- キューブが存在しない場合はスキップ
-            try:
-                self.mos_product.delete_all(mem_cube_id=cube_id, user_id="user")
-                logger.info(f"Neo4jから記憶削除完了: {cube_id}")
-            except Exception as neo4j_error:
-                if "does not exist" in str(neo4j_error) or "not found" in str(neo4j_error).lower():
-                    logger.warning(f"キューブが既に存在しません: {cube_id} - 物理削除を続行")
-                else:
-                    raise  # 他のエラーは再発生
+            # 該当ユーザーの全キューブを取得
+            user_cubes = self.mos_product.user_manager.get_user_cubes(user_id)
+            deleted_cubes = []
             
-            # キューブディレクトリとconfig.jsonファイルの物理削除
-            self._delete_cube_files(cube_id)
+            for cube in user_cubes:
+                cube_id = getattr(cube, 'cube_id', str(cube))
+                
+                # MemOSの記憶削除（Neo4jから削除）
+                try:
+                    self.mos_product.delete_all(mem_cube_id=cube_id, user_id=user_id)
+                    logger.info(f"Neo4jから記憶削除完了: {cube_id}")
+                except Exception as neo4j_error:
+                    if "does not exist" in str(neo4j_error) or "not found" in str(neo4j_error).lower():
+                        logger.warning(f"キューブが既に存在しません: {cube_id} - 物理削除を続行")
+                    else:
+                        logger.error(f"Neo4j削除エラー({cube_id}): {neo4j_error}")
+                        # Neo4jエラーでも物理削除は続行
+                
+                # キューブディレクトリとconfig.jsonファイルの物理削除
+                self._delete_cube_files(cube_id)
+                deleted_cubes.append(cube_id)
             
-            # SQLiteデータベース（memos_users.db）からキューブレコードを削除
-            self._delete_cube_from_database(cube_id)
+            # SQLiteデータベース（memos_users.db）からユーザー・全キューブレコードを完全削除
+            self._delete_user_and_all_cubes_from_database(user_id)
             
-            # user_configs内のAPIキーを空文字でクリア（セキュリティ対策/とりあえず）
-            self._clear_api_keys_from_user_configs()
-            
-            logger.info(f"キャラクター '{memory_id}' の完全削除完了")
+            logger.info(f"キャラクター '{memory_id}' の完全削除完了: 削除キューブ={deleted_cubes}")
                 
         except Exception as e:
             logger.error(f"キャラクター記憶削除エラー: {memory_id}, {e}")
@@ -528,8 +558,8 @@ class CocoroProductWrapper:
             logger.error(f"キューブファイル削除エラー: {cube_id}, {e}")
             raise
     
-    def _delete_cube_from_database(self, cube_id: str) -> None:
-        """SQLiteデータベースからキューブレコードを削除"""
+    def _delete_user_and_all_cubes_from_database(self, user_id: str) -> None:
+        """SQLiteデータベースからユーザー・全キューブレコードを完全削除"""
         import sqlite3
         
         try:
@@ -538,57 +568,21 @@ class CocoroProductWrapper:
             
             if db_path.exists():
                 with sqlite3.connect(str(db_path)) as conn:
-                    # cubesテーブルからレコード削除
-                    conn.execute("DELETE FROM cubes WHERE cube_id = ?", (cube_id,))
+                    # 該当ユーザーの全キューブを削除
+                    conn.execute("DELETE FROM cubes WHERE owner_id = ?", (user_id,))
                     # user_cube_associationテーブルからも関連レコード削除
-                    conn.execute("DELETE FROM user_cube_association WHERE cube_id = ?", (cube_id,))
+                    conn.execute("DELETE FROM user_cube_association WHERE user_id = ?", (user_id,))
+                    # usersテーブルからユーザー削除（rootユーザーは除外）
+                    conn.execute("DELETE FROM users WHERE user_id = ? AND user_id != 'root'", (user_id,))
+                    # user_configsテーブルからユーザー設定削除
+                    conn.execute("DELETE FROM user_configs WHERE user_id = ?", (user_id,))
                     conn.commit()
-                    logger.info(f"SQLiteからキューブレコード削除完了: {cube_id}")
+                    logger.info(f"SQLiteからユーザー・全キューブレコード完全削除完了: user_id={user_id}")
             else:
                 logger.warning(f"SQLiteデータベースが見つかりません: {db_path}")
                 
         except Exception as e:
-            logger.error(f"SQLiteキューブレコード削除エラー: {cube_id}, {e}")
-            raise
-    
-    def _clear_api_keys_from_user_configs(self) -> None:
-        """user_configs内のAPIキーを空文字でクリア（文字列置換）"""
-        import sqlite3
-        import datetime
-        import re
-        
-        try:
-            user_data_dir = self._get_user_data_directory()
-            db_path = user_data_dir / "Memory" / "memos_users.db"
-            
-            if not db_path.exists():
-                logger.warning(f"SQLiteデータベースが見つかりません: {db_path}")
-                return
-                
-            with sqlite3.connect(str(db_path)) as conn:
-                updated_at = datetime.datetime.now().isoformat()
-                
-                # Pythonで取得→正規表現置換→更新
-                cursor = conn.execute("SELECT config_data FROM user_configs WHERE user_id = ?", ("user",))
-                row = cursor.fetchone()
-                
-                if row:
-                    config_data = row[0]
-                    # api_keyの値を正規表現で全て空文字に置換
-                    # "api_key": "sk-proj-..." → "api_key": ""
-                    cleaned_config = re.sub(r'"api_key":\s*"[^"]*"', '"api_key": ""', config_data)
-                    
-                    conn.execute(
-                        "UPDATE user_configs SET config_data = ?, updated_at = ? WHERE user_id = ?",
-                        (cleaned_config, updated_at, "user")
-                    )
-                    conn.commit()
-                    logger.info("user_configs内の全api_keyをクリア完了")
-                else:
-                    logger.warning("user_configsにuser='user'のレコードが見つかりません")
-                    
-        except Exception as e:
-            logger.error(f"user_configsのAPIキークリアエラー: {e}")
+            logger.error(f"SQLiteユーザー・全キューブレコード削除エラー: user_id={user_id}, {e}")
             raise
     
     def get_system_prompt(self) -> Optional[str]:

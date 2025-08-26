@@ -267,7 +267,7 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig") -> Dict[
 
     # MemOS設定を動的に構築
     memos_config = {
-        "user_id": "user",
+        "user_id": current_character.memoryId,  # キャラクター固有のユーザーIDを使用
         "chat_model": {"backend": "openai", "config": {"model_name_or_path": llm_model, "api_key": api_key, "api_base": "https://api.openai.com/v1"}},
         "mem_reader": {
             "backend": "simple_struct",
