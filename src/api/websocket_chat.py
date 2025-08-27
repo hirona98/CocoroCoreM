@@ -591,7 +591,7 @@ class WebSocketChatManager:
                 session_info["task"].cancel()
         
         # スレッドプールをシャットダウン
-        self.executor.shutdown(wait=True, timeout=5.0)
+        self.executor.shutdown(wait=True)
         
         logger.info("WebSocketChatManager シャットダウン完了")
 
