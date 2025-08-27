@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "CocoroCore2 Debug",
+            "name": "CocoroCoreM Debug",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/src/main.py",
@@ -18,7 +18,7 @@
             "redirectOutput": true
         },
         {
-            "name": "CocoroCore2 Debug (External Terminal)",
+            "name": "CocoroCoreM Debug (External Terminal)",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/src/main.py",
@@ -33,7 +33,7 @@
             "stopOnEntry": false
         },
         {
-            "name": "CocoroCore2 Debug (All Code)",
+            "name": "CocoroCoreM Debug (All Code)",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/src/main.py",

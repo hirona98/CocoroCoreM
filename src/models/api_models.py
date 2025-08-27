@@ -1,5 +1,5 @@
 """
-CocoroCore2 API データモデル
+CocoroCoreM API データモデル
 
 FastAPI用のリクエスト/レスポンスモデル定義
 """

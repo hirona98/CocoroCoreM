@@ -1,4 +1,4 @@
-"""CocoroCore2 API Endpoints"""
+"""CocoroCoreM API Endpoints"""
 
 from .health import router as health_router
 from .control import router as control_router

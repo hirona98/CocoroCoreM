@@ -2,9 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## CocoroCore2 - MemOS統合バックエンド
+## CocoroCoreM - MemOS統合バックエンド
 
-CocoroCore2は、MemOS（Memory Operating System）を統合したCocoroAIのバックエンドシステムです。
+CocoroCoreMは、MemOS（Memory Operating System）を統合したCocoroAIのバックエンドシステムです。
 
 
 ## 開発環境セットアップ

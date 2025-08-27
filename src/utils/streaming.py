@@ -1,5 +1,5 @@
 """
-CocoroCore2 Server-Sent Events (SSE) サポート
+CocoroCoreM Server-Sent Events (SSE) サポート
 
 ストリーミングレスポンス用ヘルパー
 """

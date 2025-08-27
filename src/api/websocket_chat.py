@@ -1,5 +1,5 @@
 """
-CocoroCore2 WebSocket チャットAPI
+CocoroCoreM WebSocket チャットAPI
 
 WebSocket最適化されたリアルタイムチャット機能
 """
@@ -290,7 +290,7 @@ class WebSocketChatManager:
                                     # 会話履歴に即座追加（MemOSのchat_history.chat_historyと同じ形式）
                                     # 注意: MemOSは長期記憶（TreeTextMemory）のみ更新し、
                                     #      短期履歴（chat_history.chat_history）は更新しないため、
-                                    #      CocoroCore2での明示的な短期履歴更新は必須（重複なし）
+                                    #      CocoroCoreMでの明示的な短期履歴更新は必須（重複なし）
                                     chat_history.chat_history.append({"role": "user", "content": enhanced_query})
                                     chat_history.chat_history.append({"role": "assistant", "content": full_response.strip()})
                                     

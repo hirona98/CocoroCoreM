@@ -1,5 +1,5 @@
 """
-CocoroCore2 ヘルスチェックAPI
+CocoroCoreM ヘルスチェックAPI
 
 システム状態の監視とヘルスチェック
 """

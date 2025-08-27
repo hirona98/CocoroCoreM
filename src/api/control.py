@@ -1,5 +1,5 @@
 """
-CocoroCore2 システム制御API
+CocoroCoreM システム制御API
 
 システム制御とステータス管理
 """

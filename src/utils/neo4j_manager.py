@@ -1,5 +1,5 @@
 """
-CocoroCore2 Neo4j管理システム
+CocoroCoreM Neo4j管理システム
 
 組み込みNeo4jの起動・停止・接続管理
 """
@@ -54,7 +54,7 @@ class Neo4jManager:
         self.startup_timeout = 60  # 1分
         
         # Neo4jディレクトリのパス
-        self.base_dir = Path(__file__).parent.parent.parent  # CocoroCore2ディレクトリ
+        self.base_dir = Path(__file__).parent.parent.parent  # CocoroCoreMディレクトリ
         self.neo4j_dir = self.base_dir / "neo4j"
         
         # Neo4j実行ファイル

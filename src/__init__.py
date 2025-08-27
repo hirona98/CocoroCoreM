@@ -1,1 +1,1 @@
-# CocoroCore2 Package
+# CocoroCoreM Package

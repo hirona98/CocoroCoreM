@@ -1,5 +1,5 @@
 """
-CocoroCore2 MOSProduct統合ラッパー
+CocoroCoreM MOSProduct統合ラッパー
 
 MemOS MOSProductのラッパークラス実装
 """
@@ -14,14 +14,14 @@ from pathlib import Path
 # MemOSインポート前にMOS_CUBE_PATH環境変数を設定（重要）
 def _setup_mos_cube_path():
     """MemOSのCUBE_PATHを事前設定（相対パス使用）"""
-    # 実行時の基準ディレクトリ（CocoroCore2）からの相対パス
+    # 実行時の基準ディレクトリ（CocoroCoreM）からの相対パス
     # main.py実行時の作業ディレクトリが基準
     relative_cubes_dir = "../UserData2/Memory/cubes"
     
     # ディレクトリを事前作成（絶対パスで）
     base_dir = Path(__file__).parent.parent
     user_data_paths = [
-        base_dir.parent / "UserData2",  # CocoroCore2/../UserData2/
+        base_dir.parent / "UserData2",  # CocoroCoreM/../UserData2/
         base_dir.parent.parent / "UserData2",  # CocoroAI/UserData2/
     ]
     
@@ -107,7 +107,7 @@ class CocoroProductWrapper:
         """UserData2ディレクトリを取得（config_manager.pyと同じロジック）"""
         base_dir = Path(__file__).parent.parent
         user_data_paths = [
-            base_dir.parent / "UserData2",  # CocoroCore2/../UserData2/
+            base_dir.parent / "UserData2",  # CocoroCoreM/../UserData2/
             base_dir.parent.parent / "UserData2",  # CocoroAI/UserData2/
         ]
         
@@ -262,7 +262,7 @@ class CocoroProductWrapper:
         cube_path_dir.mkdir(parents=True, exist_ok=True)
         
         # 相対パスで保存（ポータブル性向上）
-        # 基準はmain.py実行時の作業ディレクトリ（CocoroCore2）
+        # 基準はmain.py実行時の作業ディレクトリ（CocoroCoreM）
         cube_path = f"../UserData2/Memory/cubes/{self.current_cube_id}"
         
         # 1. データベースにキューブレコードを作成

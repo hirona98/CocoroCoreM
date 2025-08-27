@@ -1,4 +1,4 @@
-"""CocoroCore2 Core Components"""
+"""CocoroCoreM Core Components"""
 
 from .config_manager import (
     CocoroAIConfig,

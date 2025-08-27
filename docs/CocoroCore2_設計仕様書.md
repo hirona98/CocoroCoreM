@@ -1,9 +1,9 @@
-# CocoroCore2 設計仕様書
+# CocoroCoreM 設計仕様書
 
 ## 1. プロジェクト概要
 
 ### 1.1 システム概要
-CocoroCore2は、MemOS（Memory Operating System）のMOSProductをベースとして、CocoroAIプロジェクト専用のAPIを追加したバックエンドアプリケーションです。
+CocoroCoreMは、MemOS（Memory Operating System）のMOSProductをベースとして、CocoroAIプロジェクト専用のAPIを追加したバックエンドアプリケーションです。
 
 ### 1.2 主要機能
 - **マルチモーダル対話**: テキスト+画像対応のストリーミングチャット
@@ -34,7 +34,7 @@ CocoroCore2は、MemOS（Memory Operating System）のMOSProductをベースと�
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   CocoroDock    │────│  CocoroCore2    │────│   CocoroShell   │
+│   CocoroDock    │────│  CocoroCoreM    │────│   CocoroShell   │
 │   (WPF Client)  │    │  (FastAPI)      │    │   (Unity VRM)   │
 │   ポート55600    │    │  ポート55601     │    │   ポート55605    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
@@ -49,7 +49,7 @@ CocoroCore2は、MemOS（Memory Operating System）のMOSProductをベースと�
 ### 2.2 ディレクトリ構成
 
 ```
-CocoroCore2/src/
+CocoroCoreM/src/
 ├── main.py                    # FastAPIアプリケーション
 ├── core/                      # コア機能
 │   ├── __init__.py

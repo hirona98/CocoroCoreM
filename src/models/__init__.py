@@ -1,4 +1,4 @@
-"""CocoroCore2 Data Models"""
+"""CocoroCoreM Data Models"""
 
 from .api_models import (
     HealthCheckResponse,

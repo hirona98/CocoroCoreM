@@ -1,5 +1,5 @@
 """
-CocoroCore2 Configuration Management
+CocoroCoreM Configuration Management
 
 MemOS統合による設定管理システム
 """
@@ -71,7 +71,7 @@ class CocoroAIConfig(BaseModel):
     currentCharacterIndex: int = 0
     characterList: list[CharacterData] = Field(default_factory=list)
 
-    # CocoroCore2用の追加設定
+    # CocoroCoreM用の追加設定
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
     # MemOS高度機能設定
@@ -151,7 +151,7 @@ class ConfigurationError(Exception):
 
 def parse_args() -> argparse.Namespace:
     """コマンドライン引数を解析する"""
-    parser = argparse.ArgumentParser(description="CocoroCore2設定ローダー")
+    parser = argparse.ArgumentParser(description="CocoroCoreM設定ローダー")
     parser.add_argument("--config-dir", "-c", help="設定ファイルのディレクトリパス")
     parser.add_argument("--config-file", "-f", help="設定ファイルパス")
     return parser.parse_args()
@@ -179,7 +179,7 @@ def find_config_file() -> str:
 
     # Setting.jsonのパス（複数パターンを試行）
     config_paths = [
-        base_dir.parent / "UserData2" / "Setting.json",  # CocoroCore2/../UserData2/
+        base_dir.parent / "UserData2" / "Setting.json",  # CocoroCoreM/../UserData2/
         base_dir.parent.parent / "UserData2" / "Setting.json",  # CocoroAI/UserData2/
     ]
     
@@ -246,7 +246,7 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig") -> Dict[
     # UserData2ディレクトリを探す（DBファイル保存用）
     base_dir = Path(__file__).parent.parent
     user_data_paths = [
-        base_dir.parent / "UserData2",  # CocoroCore2/../UserData2/
+        base_dir.parent / "UserData2",  # CocoroCoreM/../UserData2/
         base_dir.parent.parent / "UserData2",  # CocoroAI/UserData2/
     ]
     
@@ -330,7 +330,7 @@ def load_neo4j_config() -> Dict[str, Any]:
 
     # Setting.jsonのパス（複数パターンを試行）
     config_paths = [
-        base_dir.parent / "UserData2" / "Setting.json",  # CocoroCore2/../UserData2/
+        base_dir.parent / "UserData2" / "Setting.json",  # CocoroCoreM/../UserData2/
         base_dir.parent.parent / "UserData2" / "Setting.json",  # CocoroAI/UserData2/
     ]
     

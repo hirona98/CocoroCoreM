@@ -1,4 +1,4 @@
-# CocoroCore2 Dependencies
+# CocoroCoreM Dependencies
 
 # MemOS
 MemoryOS[tree-mem,mem-reader]==1.0.0

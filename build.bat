@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 > nul
-echo CocoroCore2 Build Tool
+echo CocoroCoreM Build Tool
 
 REM Activate virtual environment
 echo Activating virtual environment...

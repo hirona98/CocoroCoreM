@@ -1,9 +1,9 @@
-# CocoroCore2 API 仕様書
+# CocoroCoreM API 仕様書
 
 ## 概要
 
-CocoroCore2は、MemOS統合による高度な記憶機能とリアルタイム応答を実現するCocoroAIのバックエンドシステムです。
-このドキュメントは、CocoroCore2が提供するAPIエンドポイントの詳細な仕様をまとめています。
+CocoroCoreMは、MemOS統合による高度な記憶機能とリアルタイム応答を実現するCocoroAIのバックエンドシステムです。
+このドキュメントは、CocoroCoreMが提供するAPIエンドポイントの詳細な仕様をまとめています。
 
 ## エンドポイント一覧
 

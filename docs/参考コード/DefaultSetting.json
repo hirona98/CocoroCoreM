@@ -1,5 +1,5 @@
 CocoroAIで使用する設定値のデフォルト
-先頭に # がついているものはCocoroCore2で使わない
+先頭に # がついているものはCocoroCoreMで使わない
 
 {
   # "cocoroDockPort": 55600, # cocoroDockの待受ポート

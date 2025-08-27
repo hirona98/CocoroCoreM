@@ -1,5 +1,5 @@
 """
-CocoroCore2 メモリ管理API
+CocoroCoreM メモリ管理API
 
 MemOS統合メモリ管理機能へのREST APIインターフェース
 キャラクター別記憶管理に対応（CocoroDock互換）

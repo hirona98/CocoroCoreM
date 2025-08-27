@@ -1,4 +1,4 @@
-"""CocoroCore2 Utilities"""
+"""CocoroCoreM Utilities"""
 
 from .neo4j_manager import Neo4jManager
 from .streaming import SSEHelper

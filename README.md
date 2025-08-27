@@ -1,4 +1,4 @@
-# CocoroCore2
+# CocoroCoreM
 
 CocoroAI 統合バックエンドシステム
 

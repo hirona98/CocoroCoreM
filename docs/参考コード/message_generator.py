@@ -1,5 +1,5 @@
 """
-CocoroCore2 AIメッセージ生成システム
+CocoroCoreM AIメッセージ生成システム
 """
 
 import logging

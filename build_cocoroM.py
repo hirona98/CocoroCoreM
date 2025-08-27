@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""CocoroCore2 ビルドスクリプト - CocoroCoreと同じ方法"""
+"""CocoroCoreM ビルドスクリプト - CocoroCoreと同じ方法"""
 
 import shutil
 import subprocess
@@ -15,7 +15,7 @@ if sys.platform == "win32":
 
 # ビルド設定（CocoroCoreスタイル）
 BUILD_CONFIG = {
-    "app_name": "CocoroCore2",
+    "app_name": "CocoroCoreM",
     "icon_path": None,
     "onefile": False,
     "console": True,
@@ -23,7 +23,7 @@ BUILD_CONFIG = {
 
 
 def build_cocoro2(config=None):
-    """CocoroCore2のWindowsバイナリをビルドする関数（CocoroCoreスタイル）"""
+    """CocoroCoreMのWindowsバイナリをビルドする関数（CocoroCoreスタイル）"""
     build_config = config or BUILD_CONFIG
     app_name = build_config["app_name"]
 
@@ -38,7 +38,7 @@ def build_cocoro2(config=None):
     except Exception as e:
         print(f"❌ スペックファイル生成に失敗: {e}")
         print("既存のスペックファイルを使用します")
-        spec_file = "CocoroCore2.spec"
+        spec_file = "CocoroCoreM.spec"
 
     # PyInstallerのインストール確認
     try:
@@ -208,7 +208,7 @@ def build_cocoro2(config=None):
 
 def main():
     """メイン関数"""
-    print("CocoroCore2 - MemOS統合バックエンド ビルドツール")
+    print("CocoroCoreM - MemOS統合バックエンド ビルドツール")
     print("=" * 50)
     
     try:

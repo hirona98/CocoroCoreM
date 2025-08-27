@@ -1,5 +1,5 @@
 """
-CocoroCore2 メインアプリケーション
+CocoroCoreM メインアプリケーション
 
 MemOS統合バックエンドサーバー
 """
@@ -147,8 +147,8 @@ from api.websocket_chat import router as websocket_router
 from api.memory import router as memory_router
 
 
-class CocoroCore2App:
-    """CocoroCore2メインアプリケーション"""
+class CocoroCoreMApp:
+    """CocoroCoreMメインアプリケーション"""
     
     def __init__(self):
         self.app: Optional[FastAPI] = None
@@ -190,7 +190,7 @@ class CocoroCore2App:
             # ログ設定を最初に実行（MemOS初期化前）
             setup_logging()
             
-            logger.info("CocoroCore2を初期化しています...")
+            logger.info("CocoroCoreMを初期化しています...")
             self.config = CocoroAIConfig.load(config_path)
             logger.info(f"設定読み込み完了: キャラクター={self.config.character_name}")
             
@@ -206,7 +206,7 @@ class CocoroCore2App:
                     logger.error(f"リソースクリーンアップエラー: {e}")
             
             self.app = FastAPI(
-                title="CocoroCore2",
+                title="CocoroCoreM",
                 description="MemOS統合CocoroAIバックエンド",
                 version="1.0.0",
                 lifespan=lifespan
@@ -305,7 +305,7 @@ class CocoroCore2App:
                 logger.error(f"MOSProduct初期化エラー: {e}")
                 raise
             
-            logger.info("CocoroCore2初期化完了")
+            logger.info("CocoroCoreM初期化完了")
             
         except Exception as e:
             logger.error(f"アプリケーション初期化エラー: {e}")
@@ -315,7 +315,7 @@ class CocoroCore2App:
         """サーバー起動"""
         try:
             port = self.config.cocoroCorePort
-            logger.info(f"CocoroCore2サーバーを起動しています... (ポート: {port})")
+            logger.info(f"CocoroCoreMサーバーを起動しています... (ポート: {port})")
             
             # Uvicornサーバー設定
             config = uvicorn.Config(
@@ -327,7 +327,7 @@ class CocoroCore2App:
             )
             
             self.uvicorn_server = uvicorn.Server(config)
-            logger.info(f"CocoroCore2サーバーが起動しました: http://127.0.0.1:{port}")
+            logger.info(f"CocoroCoreMサーバーが起動しました: http://127.0.0.1:{port}")
             # サーバー実行
             await self.uvicorn_server.serve()
             
@@ -365,7 +365,7 @@ class CocoroCore2App:
     async def shutdown(self):
         """アプリケーションシャットダウン"""
         try:
-            logger.info("CocoroCore2をシャットダウンしています...")
+            logger.info("CocoroCoreMをシャットダウンしています...")
             
             # シャットダウンイベントを設定
             self._shutdown_event.set()
@@ -376,17 +376,17 @@ class CocoroCore2App:
                 # サーバーが停止するまで少し待機
                 await asyncio.sleep(0.1)
             
-            logger.info("CocoroCore2シャットダウン完了")
+            logger.info("CocoroCoreMシャットダウン完了")
             
         except Exception as e:
             logger.error(f"シャットダウンエラー: {e}")
 
 
 # グローバルインスタンス
-_app_instance: Optional[CocoroCore2App] = None
+_app_instance: Optional[CocoroCoreMApp] = None
 
 
-def get_app_instance() -> Optional[CocoroCore2App]:
+def get_app_instance() -> Optional[CocoroCoreMApp]:
     """アプリケーションインスタンスを取得"""
     return _app_instance
 
@@ -403,7 +403,7 @@ async def main():
     app = None
     try:
         # アプリケーション作成
-        app = CocoroCore2App()
+        app = CocoroCoreMApp()
         
         # シグナルハンドラー設定
         if sys.platform != "win32":
