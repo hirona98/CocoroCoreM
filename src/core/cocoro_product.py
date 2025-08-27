@@ -16,13 +16,13 @@ def _setup_mos_cube_path():
     """MemOSのCUBE_PATHを事前設定（相対パス使用）"""
     # 実行時の基準ディレクトリ（CocoroCoreM）からの相対パス
     # main.py実行時の作業ディレクトリが基準
-    relative_cubes_dir = "../UserData2/Memory/cubes"
+    relative_cubes_dir = "../UserDataM/Memory/cubes"
     
     # ディレクトリを事前作成（絶対パスで）
     base_dir = Path(__file__).parent.parent
     user_data_paths = [
-        base_dir.parent / "UserData2",  # CocoroCoreM/../UserData2/
-        base_dir.parent.parent / "UserData2",  # CocoroAI/UserData2/
+        base_dir.parent / "UserDataM",  # CocoroCoreM/../UserDataM/
+        base_dir.parent.parent / "UserDataM",  # CocoroAI/UserDataM/
     ]
     
     user_data_dir = None
@@ -32,7 +32,7 @@ def _setup_mos_cube_path():
             break
     
     if user_data_dir is None:
-        user_data_dir = base_dir.parent / "UserData2"
+        user_data_dir = base_dir.parent / "UserDataM"
     
     memory_dir = user_data_dir / "Memory" / "cubes"
     memory_dir.mkdir(parents=True, exist_ok=True)
@@ -96,7 +96,7 @@ class CocoroProductWrapper:
         self.system_prompt_path = None
         current_character = cocoro_config.current_character
         if current_character and current_character.systemPromptFilePath:
-            # UserData2/SystemPromptsディレクトリからUUID部分でマッチング
+            # UserDataM/SystemPromptsディレクトリからUUID部分でマッチング
             user_data_dir = self._get_user_data_directory()
             self.system_prompt_path = self._find_system_prompt_file(
                 user_data_dir / "SystemPrompts", 
@@ -104,11 +104,11 @@ class CocoroProductWrapper:
             )
     
     def _get_user_data_directory(self) -> Path:
-        """UserData2ディレクトリを取得（config_manager.pyと同じロジック）"""
+        """UserDataMディレクトリを取得（config_manager.pyと同じロジック）"""
         base_dir = Path(__file__).parent.parent
         user_data_paths = [
-            base_dir.parent / "UserData2",  # CocoroCoreM/../UserData2/
-            base_dir.parent.parent / "UserData2",  # CocoroAI/UserData2/
+            base_dir.parent / "UserDataM",  # CocoroCoreM/../UserDataM/
+            base_dir.parent.parent / "UserDataM",  # CocoroAI/UserDataM/
         ]
         
         for path in user_data_paths:
@@ -116,7 +116,7 @@ class CocoroProductWrapper:
                 return path
         
         # デフォルトは一つ上のディレクトリに作成
-        return base_dir.parent / "UserData2"
+        return base_dir.parent / "UserDataM"
     
     def _extract_uuid_from_filename(self, filename: str) -> Optional[str]:
         """
@@ -249,7 +249,7 @@ class CocoroProductWrapper:
         """キューブ作成処理"""
         cube_name = f"{character.memoryId}_cube"
         
-        # setting.jsonと同じUserData2ディレクトリにキューブデータを保存
+        # setting.jsonと同じUserDataMディレクトリにキューブデータを保存
         user_data_dir = self._get_user_data_directory()
         
         # Memory ディレクトリ下にキューブデータを保存
@@ -263,7 +263,7 @@ class CocoroProductWrapper:
         
         # 相対パスで保存（ポータブル性向上）
         # 基準はmain.py実行時の作業ディレクトリ（CocoroCoreM）
-        cube_path = f"../UserData2/Memory/cubes/{self.current_cube_id}"
+        cube_path = f"../UserDataM/Memory/cubes/{self.current_cube_id}"
         
         # 1. データベースにキューブレコードを作成
         created_cube_id = self.mos_product.create_cube_for_user(

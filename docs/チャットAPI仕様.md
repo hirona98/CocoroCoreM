@@ -354,6 +354,6 @@ interface ErrorMessage {
 - TreeTextMemoryによる階層的記憶構造
 
 ### システムプロンプト統合
-- UserData2/SystemPromptsディレクトリからの自動読み込み
+- UserDataM/SystemPromptsディレクトリからの自動読み込み
 - MemOSの記憶情報と統合したプロンプト構築
 - PersonalMemoryとOuterMemoryの適切な分類・統合

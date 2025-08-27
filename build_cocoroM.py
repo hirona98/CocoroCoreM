@@ -196,7 +196,7 @@ def build_cocoro2(config=None):
         print("   - UTF-8モードでの実行推奨: python -X utf8")
         print("   - 初回起動時にMemOSの初期化が行われます")
         print("   - Neo4jとJREディレクトリが完全に含まれています")
-        print("   - 設定ファイル（../UserData2/setting.json）が必要です")
+        print("   - 設定ファイル（../UserDataM/setting.json）が必要です")
         print("   - インターネット接続が必要（OpenAI API呼び出し）")
         
         return True

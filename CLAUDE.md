@@ -39,7 +39,7 @@ pip install -r requirements.txt
 python -X utf8 src/main.py
 
 # 設定ファイル指定（UTF-8モード必須）
-python -X utf8 src/main.py --config-file ../UserData2/setting.json
+python -X utf8 src/main.py --config-file ../UserDataM/setting.json
 ```
 
 ### ビルド

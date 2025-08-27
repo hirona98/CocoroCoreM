@@ -161,7 +161,7 @@ def find_config_file() -> str:
     """CocoroAI設定ファイルを自動検索する
 
     検索順序:
-    1. ../UserData2/Setting.json (統合設定ファイル)
+    1. ../UserDataM/Setting.json (統合設定ファイル)
 
     Returns:
         str: 設定ファイルパス
@@ -179,8 +179,8 @@ def find_config_file() -> str:
 
     # Setting.jsonのパス（複数パターンを試行）
     config_paths = [
-        base_dir.parent / "UserData2" / "Setting.json",  # CocoroCoreM/../UserData2/
-        base_dir.parent.parent / "UserData2" / "Setting.json",  # CocoroAI/UserData2/
+        base_dir.parent / "UserDataM" / "Setting.json",  # CocoroCoreM/../UserDataM/
+        base_dir.parent.parent / "UserDataM" / "Setting.json",  # CocoroAI/UserDataM/
     ]
     
     for config_path in config_paths:
@@ -243,11 +243,11 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig") -> Dict[
     embedded_model = current_character.embeddedModel or "text-embedding-3-large"
     embedded_api_key = current_character.embeddedApiKey or api_key  # APIキーが空なら通常のを使用
 
-    # UserData2ディレクトリを探す（DBファイル保存用）
+    # UserDataMディレクトリを探す（DBファイル保存用）
     base_dir = Path(__file__).parent.parent
     user_data_paths = [
-        base_dir.parent / "UserData2",  # CocoroCoreM/../UserData2/
-        base_dir.parent.parent / "UserData2",  # CocoroAI/UserData2/
+        base_dir.parent / "UserDataM",  # CocoroCoreM/../UserDataM/
+        base_dir.parent.parent / "UserDataM",  # CocoroAI/UserDataM/
     ]
     
     user_data_dir = None
@@ -258,7 +258,7 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig") -> Dict[
     
     if user_data_dir is None:
         # デフォルトは一つ上のディレクトリに作成
-        user_data_dir = base_dir.parent / "UserData2"
+        user_data_dir = base_dir.parent / "UserDataM"
     
     # Memory ディレクトリを作成し、memos_users.dbのパスを設定
     memory_dir = user_data_dir / "Memory"
@@ -330,8 +330,8 @@ def load_neo4j_config() -> Dict[str, Any]:
 
     # Setting.jsonのパス（複数パターンを試行）
     config_paths = [
-        base_dir.parent / "UserData2" / "Setting.json",  # CocoroCoreM/../UserData2/
-        base_dir.parent.parent / "UserData2" / "Setting.json",  # CocoroAI/UserData2/
+        base_dir.parent / "UserDataM" / "Setting.json",  # CocoroCoreM/../UserDataM/
+        base_dir.parent.parent / "UserDataM" / "Setting.json",  # CocoroAI/UserDataM/
     ]
     
     setting_path = None

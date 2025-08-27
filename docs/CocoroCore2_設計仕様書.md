@@ -85,10 +85,10 @@ CocoroCoreM/src/
 ### 設定ファイルパス
 ```
 # PyInstaller実行時
-{exe_dir}/../UserData2/Setting.json
+{exe_dir}/../UserDataM/Setting.json
 
 # 開発実行時  
-{project_root}/../UserData2/Setting.json
+{project_root}/../UserDataM/Setting.json
 ```
 
 ---
