@@ -126,7 +126,7 @@ def setup_logging():
     logging.getLogger("neo4j").setLevel(logging.INFO)
     logging.getLogger("neo4j.io").setLevel(logging.INFO)
     logging.getLogger("neo4j.pool").setLevel(logging.INFO)
-    logging.getLogger("neo4j.notifications").setLevel(logging.WARNING)
+    logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
 
     # httpログレベル設定
     logging.getLogger("httpcore.http11").setLevel(logging.INFO)
