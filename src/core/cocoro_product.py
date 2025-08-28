@@ -13,33 +13,17 @@ from pathlib import Path
 
 # MemOSインポート前にMOS_CUBE_PATH環境変数を設定（重要）
 def _setup_mos_cube_path():
-    """MemOSのCUBE_PATHを事前設定（相対パス使用）"""
-    # 実行時の基準ディレクトリ（CocoroCoreM）からの相対パス
-    # main.py実行時の作業ディレクトリが基準
-    relative_cubes_dir = "../UserDataM/Memory/cubes"
+    """MemOSのCUBE_PATHを設定（絶対パス使用でMemOS内部処理を確実に）"""
+    # プロジェクトルートからの絶対パス計算
+    project_root = Path.cwd()  # main.pyで作業ディレクトリをCocoroAIに設定済み
+    cubes_dir = project_root / "UserDataM" / "Memory" / "cubes"
+    cubes_dir.mkdir(parents=True, exist_ok=True)
     
-    # ディレクトリを事前作成（絶対パスで）
-    base_dir = Path(__file__).parent.parent
-    user_data_paths = [
-        base_dir.parent / "UserDataM",  # CocoroCoreM/../UserDataM/
-        base_dir.parent.parent / "UserDataM",  # CocoroAI/UserDataM/
-    ]
+    # MemOSには絶対パスを設定（内部処理を確実に）
+    absolute_cubes_path = str(cubes_dir)
+    os.environ["MOS_CUBE_PATH"] = absolute_cubes_path
     
-    user_data_dir = None
-    for path in user_data_paths:
-        if path.exists():
-            user_data_dir = path
-            break
-    
-    if user_data_dir is None:
-        user_data_dir = base_dir.parent / "UserDataM"
-    
-    memory_dir = user_data_dir / "Memory" / "cubes"
-    memory_dir.mkdir(parents=True, exist_ok=True)
-    
-    # MemOSには相対パスを設定（ポータブル性向上）
-    os.environ["MOS_CUBE_PATH"] = relative_cubes_dir
-    return relative_cubes_dir
+    return absolute_cubes_path
 
 # MemOSインポート前にパス設定を実行
 _cube_path = _setup_mos_cube_path()
@@ -68,7 +52,8 @@ class CocoroProductWrapper:
         self.logger = logger
         
         # MOSConfig動的生成（確証：config.py実装済み）
-        mos_config = get_mos_config(cocoro_config)
+        # 相対パス使用でフォルダ移動に対応
+        mos_config = get_mos_config(cocoro_config, use_relative_paths=True)
         
         logger.info(f"MOS_CUBE_PATH設定: {_cube_path}")
         
@@ -225,9 +210,17 @@ class CocoroProductWrapper:
                 if self.cocoro_config.enable_activation_memory:
                     memory_types.append("act_mem")
                 
+                # 既存キューブパスを絶対パスに変換（MemOS処理確実性のため）
+                existing_path = existing_cube.cube_path
+                if existing_path and not Path(existing_path).is_absolute():
+                    # 相対パスの場合は絶対パスに変換
+                    existing_absolute_path = str(Path.cwd() / existing_path)
+                else:
+                    existing_absolute_path = existing_path
+                
                 # MemOSの内部権限システムで正しく関連付けられるように再登録
                 self.mos_product.register_mem_cube(
-                    mem_cube_name_or_path_or_object=existing_cube.cube_path,
+                    mem_cube_name_or_path_or_object=existing_absolute_path,
                     mem_cube_id=self.current_cube_id,
                     user_id=self.current_user_id,
                     memory_types=memory_types,
@@ -249,28 +242,23 @@ class CocoroProductWrapper:
         """キューブ作成処理"""
         cube_name = f"{character.memoryId}_cube"
         
-        # setting.jsonと同じUserDataMディレクトリにキューブデータを保存
-        user_data_dir = self._get_user_data_directory()
-        
-        # Memory ディレクトリ下にキューブデータを保存
-        memory_dir = user_data_dir / "Memory"
-        cube_data_dir = memory_dir / "cubes"
-        cube_data_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 個別のキューブディレクトリを明示的に作成
-        cube_path_dir = cube_data_dir / self.current_cube_id
+        # プロジェクトルートからの絶対パス計算
+        project_root = Path.cwd()
+        cube_path_dir = project_root / "UserDataM" / "Memory" / "cubes" / self.current_cube_id
         cube_path_dir.mkdir(parents=True, exist_ok=True)
         
-        # 相対パスで保存（ポータブル性向上）
-        # 基準はmain.py実行時の作業ディレクトリ（CocoroCoreM）
-        cube_path = f"../UserDataM/Memory/cubes/{self.current_cube_id}"
+        # MemOS用絶対パス（内部処理を確実に）
+        cube_absolute_path = str(cube_path_dir)
         
-        # 1. データベースにキューブレコードを作成
+        # データベース保存用相対パス（ポータビリティ確保）
+        cube_relative_path = f"UserDataM/Memory/cubes/{self.current_cube_id}"
+        
+        # 1. データベースにキューブレコードを作成（相対パスで保存）
         created_cube_id = self.mos_product.create_cube_for_user(
             cube_name=cube_name,
             owner_id=self.current_user_id,
             cube_id=self.current_cube_id,
-            cube_path=cube_path
+            cube_path=cube_relative_path  # データベースには相対パス保存
         )
         
         # 2. MemOS標準フローに従ったキューブ初期化
@@ -352,10 +340,10 @@ class CocoroProductWrapper:
         if self.cocoro_config.enable_activation_memory:
             memory_types.append("act_mem")
         
-        # MemOSの標準フローに従い、パス指定でregister_mem_cube
+        # MemOSの標準フローに従い、絶対パス指定でregister_mem_cube
         # init_from_dirが自動実行され、text_memが適切に初期化される
         self.mos_product.register_mem_cube(
-            mem_cube_name_or_path_or_object=cube_path,  # パス指定が重要
+            mem_cube_name_or_path_or_object=cube_absolute_path,  # 絶対パスで確実に処理
             mem_cube_id=self.current_cube_id,
             user_id=self.current_user_id,
             memory_types=memory_types,
@@ -376,7 +364,7 @@ class CocoroProductWrapper:
             self.mos_product.user_register(
                 user_id=self.current_user_id,
                 user_name=self.current_user_id,  # ユーザーIDと同じ値を使用
-                config=get_mos_config(self.cocoro_config)
+                config=get_mos_config(self.cocoro_config, use_relative_paths=True)
             )
             
             logger.info(f"ユーザー登録完了: {self.current_user_id}")

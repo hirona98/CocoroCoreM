@@ -12,6 +12,12 @@ import os
 from pathlib import Path
 from typing import Optional, Any
 
+# 作業ディレクトリをCocoroAIプロジェクトルートに変更（相対パス対応）
+project_root = Path(__file__).parent.parent.parent
+if os.getcwd() != str(project_root):
+    os.chdir(project_root)
+    print(f"作業ディレクトリを変更: {project_root}")
+
 # Pythonパスにsrcディレクトリを追加
 sys.path.insert(0, str(Path(__file__).parent))
 

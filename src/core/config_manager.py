@@ -219,11 +219,12 @@ def substitute_env_variables(data: Any) -> Any:
         return data
 
 
-def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig") -> Dict[str, Any]:
+def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig", use_relative_paths: bool = True) -> Dict[str, Any]:
     """Setting.jsonから動的にMemOS設定を生成する
 
     Args:
         cocoro_config: CocoroAI設定オブジェクト
+        use_relative_paths: 相対パスを使用するかどうか（デフォルト: True）
 
     Returns:
         Dict[str, Any]: MemOS設定データ
@@ -263,7 +264,15 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig") -> Dict[
     # Memory ディレクトリを作成し、memos_users.dbのパスを設定
     memory_dir = user_data_dir / "Memory"
     memory_dir.mkdir(parents=True, exist_ok=True)
-    db_path = str(memory_dir / "memos_users.db")
+    
+    if use_relative_paths:
+        # 相対パスを使用（プロジェクトルートからの相対パス）
+        db_path = "UserDataM/Memory/memos_users.db"
+        scheduler_dump_path = "UserDataM/Memory/scheduler"
+    else:
+        # 従来の絶対パス
+        db_path = str(memory_dir / "memos_users.db")
+        scheduler_dump_path = str(memory_dir / "scheduler")
 
     # MemOS設定を動的に構築
     memos_config = {
@@ -296,18 +305,26 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig") -> Dict[
     }
 
     # Memory Scheduler設定を追加（常に有効）
+    scheduler_config = {
+        "top_k": cocoro_config.scheduler_top_k,
+        "top_n": cocoro_config.scheduler_top_n,
+        "act_mem_update_interval": cocoro_config.scheduler_act_mem_update_interval,
+        "context_window_size": cocoro_config.scheduler_context_window_size,
+        "thread_pool_max_workers": cocoro_config.scheduler_thread_pool_max_workers,
+        "consume_interval_seconds": cocoro_config.scheduler_consume_interval_seconds,
+        "enable_parallel_dispatch": cocoro_config.scheduler_enable_parallel_dispatch,
+        "enable_act_memory_update": cocoro_config.enable_activation_memory,
+    }
+    
+    # act_mem_dump_pathを追加（相対パス対応）
+    if use_relative_paths:
+        scheduler_config["act_mem_dump_path"] = scheduler_dump_path
+    else:
+        scheduler_config["act_mem_dump_path"] = scheduler_dump_path
+    
     memos_config["mem_scheduler"] = {
         "backend": "general_scheduler",
-        "config": {
-            "top_k": cocoro_config.scheduler_top_k,
-            "top_n": cocoro_config.scheduler_top_n,
-            "act_mem_update_interval": cocoro_config.scheduler_act_mem_update_interval,
-            "context_window_size": cocoro_config.scheduler_context_window_size,
-            "thread_pool_max_workers": cocoro_config.scheduler_thread_pool_max_workers,
-            "consume_interval_seconds": cocoro_config.scheduler_consume_interval_seconds,
-            "enable_parallel_dispatch": cocoro_config.scheduler_enable_parallel_dispatch,
-            "enable_act_memory_update": cocoro_config.enable_activation_memory,
-        },
+        "config": scheduler_config,
     }
 
     return memos_config
@@ -414,11 +431,12 @@ def create_mos_config_from_dict(mos_config_dict: Dict[str, Any]):
         raise ConfigurationError(f"MOSConfig作成に失敗しました: {e}")
 
 
-def get_mos_config(config: "CocoroAIConfig" = None):
+def get_mos_config(config: "CocoroAIConfig" = None, use_relative_paths: bool = True):
     """MOSConfigオブジェクトを取得する
 
     Args:
         config: CocoroAI設定オブジェクト（必須）
+        use_relative_paths: 相対パスを使用するかどうか（デフォルト: True）
 
     Returns:
         MOSConfig: MOSConfigオブジェクト
@@ -430,5 +448,5 @@ def get_mos_config(config: "CocoroAIConfig" = None):
         # configが指定されていない場合は現在の設定を読み込む
         config = CocoroAIConfig.load()
 
-    memos_config_data = generate_memos_config_from_setting(config)
+    memos_config_data = generate_memos_config_from_setting(config, use_relative_paths=use_relative_paths)
     return create_mos_config_from_dict(memos_config_data)
