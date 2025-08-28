@@ -55,8 +55,6 @@ GET /api/health
 
 **サポートするコマンド**
 - `shutdown`: システム終了
-- `start_log_forwarding`: ログ転送開始
-- `stop_log_forwarding`: ログ転送停止
 
 ---
 

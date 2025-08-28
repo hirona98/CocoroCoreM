@@ -50,14 +50,6 @@ async def system_control(request: SystemControlRequest, app=Depends(get_core_app
             asyncio.create_task(_handle_shutdown_background(app))
             result = {"message": "シャットダウン処理を開始しました"}
             
-        elif action == "start_log_forwarding":
-            # ログ転送開始
-            result = await _handle_start_log_forwarding(app)
-            
-        elif action == "stop_log_forwarding":
-            # ログ転送停止
-            result = await _handle_stop_log_forwarding(app)
-            
         else:
             raise ValueError(f"未対応のアクション: {action}")
         
@@ -117,47 +109,4 @@ async def _handle_reload_config(app) -> Dict:
         
     except Exception as e:
         logger.error(f"設定リロードエラー: {e}")
-        raise
-
-
-async def _handle_clear_cache(app) -> Dict:
-    """キャッシュクリア処理"""
-    try:
-        # 実装に応じてキャッシュクリア処理を追加
-        return {"message": "キャッシュをクリアしました"}
-        
-    except Exception as e:
-        logger.error(f"キャッシュクリアエラー: {e}")
-        raise
-
-
-async def _handle_start_log_forwarding(app) -> Dict:
-    """ログ転送開始処理"""
-    try:
-        # ログ転送の実装はまだされていないため、基本的な応答を返す
-        logger.info("ログ転送開始要求を受信しました")
-        
-        # TODO: 将来的にはここでログ転送メカニズムを起動する
-        # 例: app.log_forwarder.start() など
-        
-        return {"message": "ログ転送を開始しました"}
-        
-    except Exception as e:
-        logger.error(f"ログ転送開始エラー: {e}")
-        raise
-
-
-async def _handle_stop_log_forwarding(app) -> Dict:
-    """ログ転送停止処理"""
-    try:
-        # ログ転送の実装はまだされていないため、基本的な応答を返す
-        logger.info("ログ転送停止要求を受信しました")
-        
-        # TODO: 将来的にはここでログ転送メカニズムを停止する
-        # 例: app.log_forwarder.stop() など
-        
-        return {"message": "ログ転送を停止しました"}
-        
-    except Exception as e:
-        logger.error(f"ログ転送停止エラー: {e}")
         raise
