@@ -22,7 +22,7 @@ BUILD_CONFIG = {
 }
 
 
-def build_cocoro2(config=None):
+def build_cocoro(config=None):
     """CocoroCoreMのWindowsバイナリをビルドする関数（CocoroCoreスタイル）"""
     build_config = config or BUILD_CONFIG
     app_name = build_config["app_name"]
@@ -212,7 +212,7 @@ def main():
     print("=" * 50)
     
     try:
-        success = build_cocoro2()
+        success = build_cocoro()
         if success:
             print("\n🎉 ビルドが正常に完了しました！")
         else:

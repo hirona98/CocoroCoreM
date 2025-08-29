@@ -11,7 +11,7 @@ python -c "import sys; print(f'Python {sys.version}')"
 
 REM Execute build script with UTF-8 mode
 echo Running build script...
-python -X utf8 build_cocoro2.py
+python -X utf8 build_cocoro.py
 
 REM Deactivate virtual environment
 call deactivate

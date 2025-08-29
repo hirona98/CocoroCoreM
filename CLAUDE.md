@@ -48,7 +48,7 @@ python -X utf8 src/main.py --config-file ../UserDataM/setting.json
 build.bat
 
 # または手動実行
-python build_cocoro2.py
+python build_cocoro.py
 ```
 
 ## MemOSドキュメント
