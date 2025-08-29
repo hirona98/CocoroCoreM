@@ -190,15 +190,6 @@ def build_cocoro(config=None):
                 else:
                     file_count = len(list(item.rglob("*")))
                     print(f"   📁 {item.name}/ ({file_count} ファイル)")
-        
-        # MemOS統合の注意事項を表示
-        print("\n⚠️ MemOS統合配布に関する注意事項:")
-        print("   - UTF-8モードでの実行推奨: python -X utf8")
-        print("   - 初回起動時にMemOSの初期化が行われます")
-        print("   - Neo4jとJREディレクトリが完全に含まれています")
-        print("   - 設定ファイル（../UserDataM/setting.json）が必要です")
-        print("   - インターネット接続が必要（OpenAI API呼び出し）")
-        
         return True
     else:
         print("\n❌ ビルドに失敗しました。")
