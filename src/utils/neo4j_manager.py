@@ -8,6 +8,7 @@ import asyncio
 import logging
 import os
 import platform
+import sys
 import signal
 import socket
 import subprocess
@@ -54,7 +55,14 @@ class Neo4jManager:
         self.startup_timeout = 60  # 1分
         
         # Neo4jディレクトリのパス
-        self.base_dir = Path(__file__).parent.parent.parent  # CocoroCoreMディレクトリ
+        # PyInstaller対応: exe化時は実行ファイルと同じディレクトリを基準に
+        if getattr(sys, 'frozen', False):
+            # exe実行時
+            self.base_dir = Path(sys.executable).parent
+        else:
+            # 通常のPython実行時
+            self.base_dir = Path(__file__).parent.parent.parent  # CocoroCoreMディレクトリ
+        
         self.neo4j_dir = self.base_dir / "neo4j"
         
         # Neo4j実行ファイル

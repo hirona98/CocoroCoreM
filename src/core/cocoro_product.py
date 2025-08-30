@@ -271,8 +271,10 @@ class CocoroProductWrapper:
         import json
         
         # Neo4j設定を取得（Community Edition対応）
+        # 設定ファイルから動的にポート番号を取得
+        neo4j_port = self.cocoro_config.cocoroMemoryDBPort
         neo4j_config = {
-            "uri": "bolt://localhost:55603",
+            "uri": f"bolt://localhost:{neo4j_port}",
             "user": "neo4j", 
             "password": "password",
             "db_name": "neo4j",
