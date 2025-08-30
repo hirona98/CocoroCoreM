@@ -276,7 +276,7 @@ class WebSocketChatManager:
                             
                             # 【重要】高速レスポンス化の副作用対策
                             # 問題: MemOSの会話履歴更新も非同期になり、次回リクエスト時に文脈が失われる
-                            # 解決: 会話履歴のみ即座に手動更新（長期記憶は引き続きMemOSが非同期処理）
+                            # 解決: 会話履歴のみ即時に手動更新（長期記憶は引き続きMemOSが非同期処理）
                             try:
                                 if full_response.strip():
                                     user_id = current_user_id  # 実際のユーザーIDを使用
@@ -287,7 +287,7 @@ class WebSocketChatManager:
                                     
                                     chat_history = app.cocoro_product.mos_product.chat_history_manager[user_id]
                                     
-                                    # 会話履歴に即座追加（MemOSのchat_history.chat_historyと同じ形式）
+                                    # 会話履歴に即時追加（MemOSのchat_history.chat_historyと同じ形式）
                                     # 注意: MemOSは長期記憶（TreeTextMemory）のみ更新し、
                                     #      短期履歴（chat_history.chat_history）は更新しないため、
                                     #      CocoroCoreMでの明示的な短期履歴更新は必須（重複なし）
@@ -298,9 +298,9 @@ class WebSocketChatManager:
                                     if len(chat_history.chat_history) > 20:
                                         chat_history.chat_history = chat_history.chat_history[-20:]
                                     
-                                    logger.info(f"即座会話履歴更新完了: session_id={session_id}, 履歴件数={len(chat_history.chat_history)}")
+                                    logger.info(f"即時会話履歴更新完了: session_id={session_id}, 履歴件数={len(chat_history.chat_history)}")
                             except Exception as history_error:
-                                logger.error(f"即座会話履歴更新エラー: {history_error}", exc_info=True)
+                                logger.error(f"即時会話履歴更新エラー: {history_error}", exc_info=True)
                             
                 except Exception as e:
                     logger.error(f"MOSProduct処理エラー: {e}", exc_info=True)
@@ -364,7 +364,7 @@ class WebSocketChatManager:
                         sent_count += 1
                         
                     else:
-                        # 非textタイプ（status, reference, time, error等）は即座に送信
+                        # 非textタイプ（status, reference, time, error等）は即時に送信
                         await websocket.send_json(ws_message)
                         logger.debug(f"[WebSocket送信] {message_type}タイプ: {ws_message.get('data', {})}")
                         sent_count += 1

@@ -385,7 +385,7 @@ class CocoroProductWrapper:
     ) -> AsyncIterator[str]:
         """
         完全自動記憶管理付きストリーミングチャット
-        - ストリーミング終了シグナル（"type": "end"）を検出したら即座に終了
+        - ストリーミング終了シグナル（"type": "end"）を検出したら即時に終了
         - MemOSの記憶保存処理（約2秒）を待たずに応答を返す
         - 記憶保存はMemOS内部で非同期に継続される
         - 会話履歴はMemOSの自動履歴管理(user_chat_histories)を使用
