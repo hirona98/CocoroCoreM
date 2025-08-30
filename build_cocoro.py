@@ -112,66 +112,16 @@ def build_cocoro(config=None, force_clean=False):
         size_mb = exe_path.stat().st_size / (1024 * 1024)
         print(f"📊 実行ファイルサイズ: {size_mb:.1f} MB")
         
-        # neo4jとjreを配布ディレクトリにrobocopyで高速コピー
-        print("\n📦 重要ディレクトリの高速コピー中...")
-        dist_dir = exe_path.parent
-        
-        # Windows環境でrobocopyを使用（高速）
-        def fast_copy_directory(src, dest, name):
-            src_path = Path(src)
-            dest_path = Path(dest)
-            
-            if not src_path.exists():
-                print(f"❌ {name}ディレクトリが見つかりません: {src_path}")
-                return False
-            
-            if sys.platform == "win32":
-                # robocopyを使用（並列コピー）
-                try:
-                    result = subprocess.run([
-                        "robocopy", str(src_path), str(dest_path), 
-                        "/E", "/MT:8", "/NP", "/NDL", "/NJH", "/NJS"
-                    ], capture_output=True, text=True, timeout=300)
-                    
-                    # robocopyの戻り値チェック（0-7は成功）
-                    if result.returncode <= 7:
-                        print(f"⚡ {name}ディレクトリを高速コピー: {dest_path}")
-                        return True
-                    else:
-                        print(f"⚠️ robocopyが警告を出しました（{name}）: {result.returncode}")
-                        print("🔄 標準コピーにフォールバック...")
-                        shutil.copytree(src_path, dest_path)
-                        print(f"✅ {name}ディレクトリをコピー: {dest_path}")
-                        return True
-                except Exception as e:
-                    print(f"⚠️ robocopyに失敗（{name}）: {e}")
-                    print("🔄 標準コピーにフォールバック...")
-                    shutil.copytree(src_path, dest_path)
-                    print(f"✅ {name}ディレクトリをコピー: {dest_path}")
-                    return True
-            else:
-                # Windows以外では標準コピー
-                shutil.copytree(src_path, dest_path)
-                print(f"✅ {name}ディレクトリをコピー: {dest_path}")
-                return True
-        
-        # jreとneo4jをコピー
-        fast_copy_directory("jre", dist_dir / "jre", "jre")
-        fast_copy_directory("neo4j", dist_dir / "neo4j", "neo4j")
-        
         # 結果確認
+        dist_dir = exe_path.parent
         print(f"\n🔍 配布ディレクトリ構成確認:")
         for item in dist_dir.iterdir():
             if item.is_file():
                 size = item.stat().st_size / (1024 * 1024)
                 print(f"   📄 {item.name} ({size:.1f} MB)")
             elif item.is_dir():
-                if item.name in ["neo4j", "jre"]:
-                    file_count = len(list(item.rglob("*")))
-                    print(f"   📁 {item.name}/ ({file_count} ファイル) ")
-                else:
-                    file_count = len(list(item.rglob("*")))
-                    print(f"   📁 {item.name}/ ({file_count} ファイル)")
+                file_count = len(list(item.rglob("*")))
+                print(f"   📁 {item.name}/ ({file_count} ファイル)")
         return True
     else:
         print("\n❌ ビルドに失敗しました。")
