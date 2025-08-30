@@ -7,7 +7,7 @@ MemOSのMOSProductクラスを継承し、CocoroAIのシステムプロンプト
 
 import logging
 import json
-from typing import Optional, Callable, List
+from typing import Optional, Callable, List, Dict, Any
 
 from memos.mem_os.product import MOSProduct
 from memos.memories.textual.item import TextualMemoryItem
@@ -51,7 +51,10 @@ class CocoroMOSProduct(MOSProduct):
     全MemOS機能を日本語化してCocoroAIシステムと統合
     """
     
-    def __init__(self, default_config=None, max_user_instances=1, system_prompt_provider: Optional[Callable[[], Optional[str]]] = None):
+    def __init__(self, default_config=None, max_user_instances=1, 
+                 system_prompt_provider: Optional[Callable[[], Optional[str]]] = None,
+                 # LiteLLM統合パラメータ
+                 litellm_config: Optional[Dict[str, Any]] = None):
         """
         初期化
         
@@ -59,13 +62,22 @@ class CocoroMOSProduct(MOSProduct):
             default_config: MemOSデフォルト設定
             max_user_instances: 最大ユーザーインスタンス数
             system_prompt_provider: CocoroAIシステムプロンプト取得関数
+            litellm_config: LiteLLM設定辞書
         """
         # MemOS全体のプロンプトを日本語版に置換
         self._replace_memos_prompts_with_japanese()
         
+        # 通常のMOSProduct初期化（MemOS標準のchat_llmが作成される）
         super().__init__(default_config=default_config, max_user_instances=max_user_instances)
+        
         self.system_prompt_provider = system_prompt_provider
-        logger.info("CocoroMOSProduct初期化完了")
+        self._original_chat_llm = None  # フォールバック用（将来の拡張のため保持）
+        
+        # LiteLLM統合（方法1: chat_llmの直接置き換え）
+        if litellm_config:
+            self._setup_litellm(litellm_config)
+        
+        logger.info(f"CocoroMOSProduct初期化完了: LiteLLM={'有効' if litellm_config else '無効'}")
     
     def _replace_memos_prompts_with_japanese(self):
         """
@@ -119,6 +131,38 @@ class CocoroMOSProduct(MOSProduct):
             logger.warning(f"MemOSモジュールのインポートに失敗: {e}")
         except Exception as e:
             logger.error(f"プロンプト置換中にエラーが発生: {e}", exc_info=True)
+    
+    def _setup_litellm(self, config: Dict[str, Any]):
+        """LiteLLMセットアップ（エラー時は例外を再発生）"""
+        try:
+            # 元のchat_llmをバックアップ（将来の拡張のため）
+            self._original_chat_llm = self.chat_llm
+            
+            # LiteLLMWrapper import
+            from .litellm_wrapper import LiteLLMConfig, LiteLLMWrapper
+            
+            # LiteLLMConfig作成
+            litellm_config = LiteLLMConfig(
+                model_name=config.get('model', 'gpt-4o-mini'),
+                api_key=config.get('api_key', ''),
+                max_tokens=config.get('max_tokens', 1024),
+                extra_config=config.get('extra_config', {})
+            )
+            
+            # chat_llmをLiteLLMWrapperに置き換え
+            self.chat_llm = LiteLLMWrapper(litellm_config)
+            
+            logger.info(f"✅ LiteLLM統合完了: {litellm_config.model_name_or_path}")
+            
+        except Exception as e:
+            # 詳細エラー出力
+            logger.error(f"❌ LiteLLMセットアップ失敗:")
+            logger.error(f"   モデル: {config.get('model', 'N/A')}")
+            logger.error(f"   エラー: {str(e)}")
+            logger.error(f"   設定内容: {config}")
+            
+            # エラーを再発生（フォールバックしない）
+            raise RuntimeError(f"LiteLLMセットアップエラー: {str(e)}")
     
     def _build_enhance_system_prompt(
         self, user_id: str, memories_all: List[TextualMemoryItem]

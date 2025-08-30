@@ -57,11 +57,29 @@ class CocoroProductWrapper:
         
         logger.info(f"MOS_CUBE_PATH設定: {_cube_path}")
         
-        # CocoroMOSProduct初期化（CocoroAI専用システムプロンプト対応）
+        # LiteLLM設定取得（常に使用）
+        current_character = cocoro_config.current_character
+        litellm_config = None
+        
+        if current_character:
+            # APIキー決定（専用キーがあれば使用、なければ既存のapiKeyを使用）
+            api_key = getattr(current_character, 'liteLLMApiKey', '') or current_character.apiKey
+            
+            litellm_config = {
+                'model': getattr(current_character, 'liteLLMModel', 'gpt-4o-mini'),
+                'api_key': api_key,
+                'max_tokens': 1024,
+                'extra_config': getattr(current_character, 'liteLLMConfig', {})
+            }
+            
+            logger.info(f"🎯 LiteLLM設定: model={litellm_config['model']}")
+        
+        # CocoroMOSProduct初期化（CocoroAI専用システムプロンプト対応 + LiteLLM統合）
         self.mos_product = CocoroMOSProduct(
             default_config=mos_config,
             max_user_instances=1,  # シングルユーザー
-            system_prompt_provider=self.get_system_prompt  # CocoroAIシステムプロンプト取得関数を渡す
+            system_prompt_provider=self.get_system_prompt,  # CocoroAIシステムプロンプト取得関数を渡す
+            litellm_config=litellm_config  # LiteLLM設定辞書
         )
         
         # 画像・メッセージ生成器は後で初期化（循環参照回避）

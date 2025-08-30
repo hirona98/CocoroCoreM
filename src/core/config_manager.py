@@ -33,6 +33,11 @@ class CharacterData(BaseModel):
     embeddedApiKey: str = ""
     embeddedModel: str = "text-embedding-3-small"
 
+    # LiteLLM統合設定
+    liteLLMModel: str = Field(default="gpt-4o-mini", description="LiteLLMモデル名（例: xai/grok-2-latest, anthropic/claude-3-5-sonnet-20241022）")
+    liteLLMApiKey: str = Field(default="", description="プロバイダー専用APIキー（空なら既存のapiKeyを使用）")
+    liteLLMConfig: Dict[str, Any] = Field(default_factory=dict, description="プロバイダー固有の追加設定")
+
 
 class LoggingConfig(BaseModel):
     """ログ設定"""
