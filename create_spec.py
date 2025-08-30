@@ -219,10 +219,8 @@ def create_spec_file():
         'sentence_transformers',  # 完全除外：外部API使用
         'onnxruntime',  # 完全除外：外部API使用（32MB削減）
         'tensorflow', 
-        'scipy',
         'matplotlib',
         'pandas',
-        'sklearn',
         'psycopg2',  # sqlalchemyは必要だが、psycopg2は除外
         'pytest',
         'ipython',
