@@ -112,6 +112,30 @@ def create_spec_file():
     else:
         print("⚠️ mcp not found (optional)")
     
+    # tiktoken (encoding ファイル必須)
+    tiktoken_path = site_packages / "tiktoken"
+    if tiktoken_path.exists():
+        # tiktokenパッケージ全体をバンドル
+        data_entries.append(f"('{tiktoken_path.as_posix()}', 'tiktoken')")
+        
+        # tiktoken_ext内のエンコーディングファイルも明示的に含める
+        tiktoken_ext_path = site_packages / "tiktoken_ext"
+        if tiktoken_ext_path.exists():
+            data_entries.append(f"('{tiktoken_ext_path.as_posix()}', 'tiktoken_ext')")
+            print(f"✅ tiktoken_ext found: {tiktoken_ext_path}")
+        
+        print(f"✅ tiktoken found: {tiktoken_path}")
+    else:
+        print("⚠️ tiktoken not found (required for OpenAI API)")
+    
+    # litellmもエンコーディング問題を避けるため明示的に含める
+    litellm_path = site_packages / "litellm"
+    if litellm_path.exists():
+        data_entries.append(f"('{litellm_path.as_posix()}', 'litellm')")
+        print(f"✅ litellm found: {litellm_path}")
+    else:
+        print("⚠️ litellm not found (required for LLM integration)")
+    
     # Neo4jディレクトリ（プロジェクト内）
     if Path("neo4j").exists():
         data_entries.append("('neo4j', 'neo4j')")
@@ -178,6 +202,17 @@ def create_spec_file():
         'transformers',
         'transformers.tokenization_utils',
         'transformers.tokenization_utils_base',
+        # tiktoken（OpenAI API用）
+        'tiktoken',
+        'tiktoken.core',
+        'tiktoken.encoding',
+        'tiktoken_ext',
+        'tiktoken_ext.openai_public',
+        # LiteLLM（エンコーディング問題対応）
+        'litellm',
+        'litellm.utils',
+        'litellm.llms',
+        'litellm.llms.openai',
         # 基本ライブラリ
         'pydantic',
         'pydantic.v1',
@@ -244,7 +279,7 @@ a = Analysis(
     binaries=[],
     datas=[{', '.join(data_entries)}],
     hiddenimports={hidden_imports},
-    hookspath=[],
+    hookspath=['.'],
     hooksconfig={{}},
     runtime_hooks=[],
     excludes={excludes},
