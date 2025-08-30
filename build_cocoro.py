@@ -22,12 +22,16 @@ BUILD_CONFIG = {
 }
 
 
-def build_cocoro(config=None):
+def build_cocoro(config=None, force_clean=False):
     """CocoroCoreMのWindowsバイナリをビルドする関数（CocoroCoreスタイル）"""
     build_config = config or BUILD_CONFIG
     app_name = build_config["app_name"]
 
     print(f"\n=== {app_name} ビルドを開始します ===")
+    if force_clean:
+        print("🧹 フルクリーンビルドモード")
+    else:
+        print("⚡ 高速ビルドモード（キャッシュ活用）")
 
     # 動的スペックファイル生成（CocoroCoreと同じ）
     print("📋 動的スペックファイルを生成中...")
@@ -60,11 +64,13 @@ def build_cocoro(config=None):
             print(f"❌ PyInstallerのインストールに失敗しました: {e}")
             sys.exit(1)
 
-    # ビルドディレクトリをクリーンアップ
+    # ビルドディレクトリをクリーンアップ（高速ビルド時は保持）
     build_path = Path("build")
-    if build_path.exists():
+    if force_clean and build_path.exists():
         shutil.rmtree(build_path)
         print(f"🗑️ build ディレクトリをクリーンアップしました")
+    elif not force_clean and build_path.exists():
+        print(f"⚡ build ディレクトリを保持（キャッシュ活用）")
     
     # distディレクトリをクリーンアップ
     dist_path = Path("dist")
@@ -72,10 +78,14 @@ def build_cocoro(config=None):
         shutil.rmtree(dist_path)
         print(f"🗑️ dist ディレクトリをクリーンアップしました")
 
-    # PyInstallerでスペックファイルを使用してビルド
+    # PyInstallerでスペックファイルを使用してビルド（キャッシュ活用）
     print(f"\n📋 PyInstallerでビルド中（{spec_file}使用）...")
-    spec_args = ["pyinstaller", spec_file, "--clean"]
-    print("📋 実行するコマンド:", " ".join(spec_args))
+    if force_clean:
+        spec_args = ["pyinstaller", spec_file, "--clean"]
+        print("🧹 実行するコマンド（クリーンビルド）:", " ".join(spec_args))
+    else:
+        spec_args = ["pyinstaller", spec_file]
+        print("⚡ 実行するコマンド（キャッシュ活用）:", " ".join(spec_args))
     
     try:
         result = subprocess.call(spec_args)
@@ -102,27 +112,52 @@ def build_cocoro(config=None):
         size_mb = exe_path.stat().st_size / (1024 * 1024)
         print(f"📊 実行ファイルサイズ: {size_mb:.1f} MB")
         
-        # neo4jとjreを配布ディレクトリにコピー
-        print("\n📦 重要ディレクトリのコピー中...")
+        # neo4jとjreを配布ディレクトリにrobocopyで高速コピー
+        print("\n📦 重要ディレクトリの高速コピー中...")
         dist_dir = exe_path.parent
         
-        # jreディレクトリの処理
-        jre_dest = dist_dir / "jre"
-        jre_src = Path("jre")
-        if jre_src.exists():
-            shutil.copytree(jre_src, jre_dest)
-            print(f"✅ jreディレクトリをコピー: {jre_dest}")
-        else:
-            print("❌ jreディレクトリが見つかりません")
+        # Windows環境でrobocopyを使用（高速）
+        def fast_copy_directory(src, dest, name):
+            src_path = Path(src)
+            dest_path = Path(dest)
+            
+            if not src_path.exists():
+                print(f"❌ {name}ディレクトリが見つかりません: {src_path}")
+                return False
+            
+            if sys.platform == "win32":
+                # robocopyを使用（並列コピー）
+                try:
+                    result = subprocess.run([
+                        "robocopy", str(src_path), str(dest_path), 
+                        "/E", "/MT:8", "/NP", "/NDL", "/NJH", "/NJS"
+                    ], capture_output=True, text=True, timeout=300)
+                    
+                    # robocopyの戻り値チェック（0-7は成功）
+                    if result.returncode <= 7:
+                        print(f"⚡ {name}ディレクトリを高速コピー: {dest_path}")
+                        return True
+                    else:
+                        print(f"⚠️ robocopyが警告を出しました（{name}）: {result.returncode}")
+                        print("🔄 標準コピーにフォールバック...")
+                        shutil.copytree(src_path, dest_path)
+                        print(f"✅ {name}ディレクトリをコピー: {dest_path}")
+                        return True
+                except Exception as e:
+                    print(f"⚠️ robocopyに失敗（{name}）: {e}")
+                    print("🔄 標準コピーにフォールバック...")
+                    shutil.copytree(src_path, dest_path)
+                    print(f"✅ {name}ディレクトリをコピー: {dest_path}")
+                    return True
+            else:
+                # Windows以外では標準コピー
+                shutil.copytree(src_path, dest_path)
+                print(f"✅ {name}ディレクトリをコピー: {dest_path}")
+                return True
         
-        # neo4jディレクトリの処理
-        neo4j_dest = dist_dir / "neo4j"
-        neo4j_src = Path("neo4j")
-        if neo4j_src.exists():
-            shutil.copytree(neo4j_src, neo4j_dest)
-            print(f"✅ neo4jディレクトリをコピー: {neo4j_dest}")
-        else:
-            print("❌ neo4jディレクトリが見つかりません")
+        # jreとneo4jをコピー
+        fast_copy_directory("jre", dist_dir / "jre", "jre")
+        fast_copy_directory("neo4j", dist_dir / "neo4j", "neo4j")
         
         # 結果確認
         print(f"\n🔍 配布ディレクトリ構成確認:")
@@ -133,7 +168,7 @@ def build_cocoro(config=None):
             elif item.is_dir():
                 if item.name in ["neo4j", "jre"]:
                     file_count = len(list(item.rglob("*")))
-                    print(f"   📁 {item.name}/ ({file_count} ファイル) ⭐重要")
+                    print(f"   📁 {item.name}/ ({file_count} ファイル) ")
                 else:
                     file_count = len(list(item.rglob("*")))
                     print(f"   📁 {item.name}/ ({file_count} ファイル)")
@@ -149,10 +184,16 @@ def main():
     print("CocoroCoreM - MemOS統合バックエンド ビルドツール")
     print("=" * 50)
     
+    # コマンドライン引数チェック
+    force_clean = "--clean" in sys.argv or "-c" in sys.argv
+    
     try:
-        success = build_cocoro()
+        success = build_cocoro(force_clean=force_clean)
         if success:
             print("\n🎉 ビルドが正常に完了しました！")
+            if not force_clean:
+                print("💡 次回も高速ビルドするには引数なしで実行してください")
+                print("💡 フルクリーンビルドするには --clean または -c オプションを使用してください")
         else:
             print("\n💔 ビルドに失敗しました。")
             sys.exit(1)
