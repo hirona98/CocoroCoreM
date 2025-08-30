@@ -187,22 +187,25 @@ class Neo4jManager:
             return True
         
         try:
-            # 1. 最新のSetting.json設定を再読み込み
+            # 1. 残留java.exeプロセス確認・終了
+            await self._cleanup_java_processes()
+            
+            # 2. 最新のSetting.json設定を再読み込み
             if not self._reload_config():
                 self.logger.error("Setting.jsonの再読み込みに失敗しました")
                 return False
             
-            # 2. Neo4j実行ファイルの存在確認
+            # 3. Neo4j実行ファイルの存在確認
             if not self.neo4j_executable.exists():
                 self.logger.error(f"Neo4j実行ファイルが見つかりません: {self.neo4j_executable}")
                 return False
             
-            # 3. Neo4j設定ファイル更新（最新の設定で）
+            # 4. Neo4j設定ファイル更新（最新の設定で）
             if not self._update_neo4j_config():
                 self.logger.error("Neo4j設定ファイルの更新に失敗しました")
                 return False
 
-            # 4. ポート利用可能性確認
+            # 5. ポート利用可能性確認
             if not self._check_ports_available():
                 self.logger.error(f"Neo4j起動に必要なポート（Bolt: {self.bolt_port}, HTTP: {self.web_port}）が使用中です。他のアプリケーションまたは前回のNeo4jプロセスが残っている可能性があります。")
                 return False
@@ -317,6 +320,76 @@ class Neo4jManager:
         self.process = None
         self.is_running = False
     
+    async def _cleanup_java_processes(self):
+        """CocoroCoreMのjreを使用するjava.exeプロセスのみを終了"""
+        try:
+            # CocoroCoreMのjreディレクトリパス
+            java_home = str(self.base_dir / "jre")
+            
+            # wmicでjava.exeプロセスの情報を取得
+            cmd = 'wmic process where "name=\'java.exe\'" get processid,commandline /format:csv'
+            
+            def run_wmic():
+                return subprocess.run(
+                    cmd, 
+                    shell=True, 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=5
+                )
+            
+            result = await asyncio.get_event_loop().run_in_executor(None, run_wmic)
+            
+            if result.returncode != 0:
+                self.logger.error(f"wmicコマンド実行エラー: {result.stderr}")
+                return
+            
+            # CSVの解析（ヘッダー行をスキップ）
+            lines = result.stdout.strip().split('\n')[1:]  # ヘッダーをスキップ
+            target_pids = []
+            
+            for line in lines:
+                if not line.strip():
+                    continue
+                
+                # CSV形式: Node,CommandLine,ProcessId
+                try:
+                    parts = line.split(',', 2)
+                    if len(parts) >= 3:
+                        command_line = parts[1].strip()
+                        pid_str = parts[2].strip()
+                        
+                        if java_home in command_line and pid_str.isdigit():
+                            target_pids.append(int(pid_str))
+                            self.logger.info(f"CocoroCoreMの残留java.exeプロセスを発見: PID {pid_str}")
+                
+                except (ValueError, IndexError) as e:
+                    self.logger.debug(f"wmicの行解析をスキップ: {line[:50]}... (エラー: {e})")
+                    continue
+            
+            # 対象プロセスを終了
+            for pid in target_pids:
+                try:
+                    subprocess.run(
+                        f"taskkill /f /pid {pid}",
+                        shell=True,
+                        check=False,
+                        timeout=3
+                    )
+                    self.logger.info(f"残留java.exeプロセス終了完了: PID {pid}")
+                except Exception as e:
+                    self.logger.error(f"java.exeプロセス終了エラー (PID {pid}): {e}")
+            
+            if not target_pids:
+                self.logger.info("CocoroCoreMのjava.exeプロセスは見つかりませんでした")
+            else:
+                # プロセス終了後、ポート解放まで少し待機
+                self.logger.info("java.exeプロセス終了後、ポート解放を待機しています...")
+                await asyncio.sleep(3)
+                
+        except Exception as e:
+            self.logger.error(f"java.exeプロセスクリーンアップエラー: {e}")
+
     async def health_check(self) -> Dict:
         """ヘルスチェック"""
         result = {
