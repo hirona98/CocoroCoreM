@@ -380,11 +380,9 @@ class Neo4jManager:
                 except Exception as e:
                     self.logger.error(f"java.exeプロセス終了エラー (PID {pid}): {e}")
             
-            if not target_pids:
-                self.logger.info("CocoroCoreMのjava.exeプロセスは見つかりませんでした")
-            else:
+            if target_pids:
                 # プロセス終了後、ポート解放まで少し待機
-                self.logger.info("java.exeプロセス終了後、ポート解放を待機しています...")
+                self.logger.info("java.exeプロセスのポート解放を待機しています...")
                 await asyncio.sleep(3)
                 
         except Exception as e:
