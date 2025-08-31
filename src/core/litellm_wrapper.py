@@ -87,8 +87,11 @@ class LiteLLMWrapper:
             # ログレベル設定（LiteLLMの詳細ログを抑制）
             litellm.set_verbose = False
             
+            # LiteLLMのログレベルを設定
+            logging.getLogger("LiteLLM").setLevel(logging.INFO)
+            logging.getLogger("litellm").setLevel(logging.INFO)
+            
             # LiteLLMのログを切り詰めるためのカスタムハンドラー設定
-            import logging
             litellm_logger = logging.getLogger("LiteLLM")
             
             # 既存のハンドラーを取得して切り詰め機能を追加
@@ -141,10 +144,6 @@ class LiteLLMWrapper:
                     os.environ["VERTEXAI_LOCATION"] = self.config.extra_config["location"]
                 logger.info(f"   → VERTEX_AI 環境変数に設定")
             # 他のプロバイダーも同様に追加可能
-
-    # デバッグ出力用      
-    # import litellm
-    # litellm.set_verbose = True
     
     def generate(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """
