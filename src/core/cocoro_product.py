@@ -62,17 +62,33 @@ class CocoroProductWrapper:
         litellm_config = None
         
         if current_character:
-            # APIキー決定（専用キーがあれば使用、なければ既存のapiKeyを使用）
-            api_key = getattr(current_character, 'liteLLMApiKey', '') or current_character.apiKey
+            # LLMモデル名を取得（既存のllmModelフィールドを使用）
+            if not hasattr(current_character, 'llmModel') or not current_character.llmModel:
+                raise ValueError("❌ llmModelが設定されていません。Setting.jsonでllmModelを設定してください（例: 'openai/gpt-4o-mini'）")
+            llm_model = current_character.llmModel
+            
+            # LLM用APIキーを直接使用
+            api_key = current_character.get_api_key()
+            
+            # 埋め込みモデルとAPIキーの検証
+            if not hasattr(current_character, 'embeddedModel') or not current_character.embeddedModel:
+                raise ValueError("❌ embeddedModelが設定されていません。Setting.jsonでembeddedModelを設定してください（例: 'openai/text-embedding-3-small'）")
+            
+            # 埋め込み用APIキーを直接使用
+            embedding_api_key = current_character.get_embedded_api_key()
             
             litellm_config = {
-                'model': getattr(current_character, 'liteLLMModel', 'gpt-4o-mini'),
+                'model': llm_model,
                 'api_key': api_key,
                 'max_tokens': 1024,
-                'extra_config': getattr(current_character, 'liteLLMConfig', {})
+                'extra_config': {},
+                # 埋め込み設定を追加（既存フィールド使用、設定必須）
+                'embedding_model': current_character.embeddedModel,
+                'embedding_api_key': embedding_api_key
             }
             
             logger.info(f"🎯 LiteLLM設定: model={litellm_config['model']}")
+            logger.info(f"🎯 Embedding設定: model={litellm_config['embedding_model']}")
         
         # CocoroMOSProduct初期化（CocoroAI専用システムプロンプト対応 + LiteLLM統合）
         self.mos_product = CocoroMOSProduct(
@@ -97,7 +113,6 @@ class CocoroProductWrapper:
         
         # システムプロンプトのパスを取得
         self.system_prompt_path = None
-        current_character = cocoro_config.current_character
         if current_character and current_character.systemPromptFilePath:
             # UserDataM/SystemPromptsディレクトリからUUID部分でマッチング
             user_data_dir = self._get_user_data_directory()
@@ -105,6 +120,7 @@ class CocoroProductWrapper:
                 user_data_dir / "SystemPrompts", 
                 current_character.systemPromptFilePath
             )
+    
     
     def _get_user_data_directory(self) -> Path:
         """UserDataMディレクトリを取得（config_manager.pyと同じロジック）"""
@@ -196,6 +212,7 @@ class CocoroProductWrapper:
         except Exception as e:
             logger.error(f"CocoroProductWrapper初期化エラー: {e}")
             raise
+    
     
     def _setup_current_character_cube(self):
         """現在のキャラクターのMemCubeを作成・設定（起動時1回のみ）"""

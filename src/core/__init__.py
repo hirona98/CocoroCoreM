@@ -12,6 +12,7 @@ from .config_manager import (
 )
 
 from .cocoro_mos_product import CocoroMOSProduct
+from .litellm_wrapper import LiteLLMWrapper, LiteLLMConfig
 
 __all__ = [
     "CocoroAIConfig",
@@ -23,4 +24,6 @@ __all__ = [
     "load_neo4j_config",
     "get_mos_config",
     "CocoroMOSProduct",
+    "LiteLLMWrapper",
+    "LiteLLMConfig",
 ]

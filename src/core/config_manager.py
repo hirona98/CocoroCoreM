@@ -6,6 +6,7 @@ MemOS統合による設定管理システム
 
 import argparse
 import json
+import logging
 import os
 import re
 import sys
@@ -14,29 +15,39 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field, ValidationError, validator
 
+logger = logging.getLogger(__name__)
+
 
 class CharacterData(BaseModel):
     """キャラクター設定データ"""
 
     isReadOnly: bool = False
-    modelName: str = "つくよみちゃん"
+    modelName: str = ""
     isUseLLM: bool = False
     apiKey: str = ""
-    llmModel: str = "gpt-4o-mini"
+    llmModel: str = ""
     # 画像分析用設定
-    visionModel: str = "gpt-4o-mini"  # 画像分析用モデル
+    visionModel: str = ""  # 画像分析用モデル
     visionApiKey: str = ""  # 画像分析用APIキー（空ならapiKeyを使用）
     localLLMBaseUrl: str = ""
     systemPromptFilePath: str = ""
     isEnableMemory: bool = False
     memoryId: str = ""
     embeddedApiKey: str = ""
-    embeddedModel: str = "text-embedding-3-small"
-
-    # LiteLLM統合設定
-    liteLLMModel: str = Field(default="gpt-4o-mini", description="LiteLLMモデル名（例: xai/grok-2-latest, anthropic/claude-3-5-sonnet-20241022）")
-    liteLLMApiKey: str = Field(default="", description="プロバイダー専用APIキー（空なら既存のapiKeyを使用）")
-    liteLLMConfig: Dict[str, Any] = Field(default_factory=dict, description="プロバイダー固有の追加設定")
+    embeddedModel: str = ""
+    
+    def get_api_key(self) -> str:
+        """APIキーを取得（空の場合はダミー値を返す）"""
+        return self.apiKey or "dummy-api-key"
+    
+    def get_vision_api_key(self) -> str:
+        """Vision APIキーを取得（空の場合はダミー値を返す）"""
+        return self.visionApiKey or self.get_api_key()
+    
+    def get_embedded_api_key(self) -> str:
+        """埋め込みAPIキーを取得（空の場合はダミー値を返す）"""
+        return self.embeddedApiKey or self.get_api_key()
+    
 
 
 class LoggingConfig(BaseModel):
@@ -242,12 +253,18 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig", use_rela
         raise ConfigurationError("現在のキャラクターが見つかりません")
 
     # LLMモデルとAPIキーをキャラクター設定から取得
-    llm_model = current_character.llmModel or "gpt-4o-mini"
-    api_key = current_character.apiKey or ""
+    llm_model = current_character.llmModel or ""
+    api_key = current_character.get_api_key()
 
     # 埋め込みモデルとAPIキーをキャラクター設定から取得
-    embedded_model = current_character.embeddedModel or "text-embedding-3-large"
-    embedded_api_key = current_character.embeddedApiKey or api_key  # APIキーが空なら通常のを使用
+    embedded_model = current_character.embeddedModel or ""
+    embedded_api_key = current_character.get_embedded_api_key()
+    
+    # 埋め込みモデルがLiteLLM形式かチェック（プロバイダー推定用）
+    if "/" in embedded_model:
+        embedded_provider = embedded_model.split("/")[0]
+    else:
+        embedded_provider = "openai"  # デフォルトはOpenAI
 
     # UserDataMディレクトリを探す（DBファイル保存用）
     base_dir = Path(__file__).parent.parent
@@ -279,6 +296,11 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig", use_rela
         db_path = str(memory_dir / "memos_users.db")
         scheduler_dump_path = str(memory_dir / "scheduler")
 
+    # 注意：MemOSの標準embedderは使用せず、LiteLLMEmbedderで置き換えるため、
+    # 複雑な環境変数設定は不要（CocoroMOSProductで直接置き換え）
+    logger.info(f"埋め込み設定: model={embedded_model}, provider={embedded_provider}")
+    logger.info(f"注意: 実際の埋め込み処理はLiteLLMEmbedderで実行されます")
+
     # MemOS設定を動的に構築
     memos_config = {
         "user_id": current_character.memoryId,  # キャラクター固有のユーザーIDを使用
@@ -308,6 +330,10 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig", use_rela
         # PRO_MODE (Chain of Thought) 設定
         "PRO_MODE": cocoro_config.enable_pro_mode,
     }
+    
+    # 注意：下記のMemOS embedder設定は初期化時のみ使用され、
+    # 実際の実行時はCocoroMOSProductでLiteLLMEmbedderに置き換えられます
+    logger.info(f"MemOS標準embedder設定（初期化後に置き換え予定）: {embedded_model}")
 
     # Memory Scheduler設定を追加（常に有効）
     scheduler_config = {

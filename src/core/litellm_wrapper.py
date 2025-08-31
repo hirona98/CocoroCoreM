@@ -55,6 +55,33 @@ class LiteLLMWrapper:
             self.litellm = litellm
             # ログレベル設定（LiteLLMの詳細ログを抑制）
             litellm.set_verbose = False
+            
+            # LiteLLMのログを切り詰めるためのカスタムハンドラー設定
+            import logging
+            litellm_logger = logging.getLogger("LiteLLM")
+            
+            # 既存のハンドラーを取得して切り詰め機能を追加
+            class TruncateLogHandler(logging.Handler):
+                def __init__(self, original_handlers):
+                    super().__init__()
+                    self.original_handlers = original_handlers
+                    
+                def emit(self, record):
+                    #if hasattr(record, 'msg') and isinstance(record.msg, str):
+                    #    if len(record.msg) > 300:
+                    #        record.msg = record.msg[:300] + "...[切り詰め]"
+                    
+                    # 元のハンドラーに転送
+                    for handler in self.original_handlers:
+                        if handler.level <= record.levelno:
+                            handler.emit(record)
+            
+            # カスタムハンドラーを適用
+            original_handlers = litellm_logger.handlers.copy()
+            if original_handlers:
+                litellm_logger.handlers.clear()
+                truncate_handler = TruncateLogHandler(original_handlers)
+                litellm_logger.addHandler(truncate_handler)
         except ImportError:
             raise RuntimeError("LiteLLMがインストールされていません。pip install litellm でインストールしてください。")
         
@@ -65,17 +92,27 @@ class LiteLLMWrapper:
         if self.config.api_key:
             if self.config.provider == "openai":
                 os.environ["OPENAI_API_KEY"] = self.config.api_key
+                logger.info(f"   → OPENAI_API_KEY に設定")
             elif self.config.provider == "anthropic":
                 os.environ["ANTHROPIC_API_KEY"] = self.config.api_key
+                logger.info(f"   → ANTHROPIC_API_KEY に設定")
             elif self.config.provider == "xai":
                 os.environ["XAI_API_KEY"] = self.config.api_key
+                logger.info(f"   → XAI_API_KEY に設定")
+            elif self.config.provider == "gemini":
+                os.environ["GEMINI_API_KEY"] = self.config.api_key
+                logger.info(f"   → GEMINI_API_KEY に設定")
             elif self.config.provider == "vertex_ai":
                 # Vertex AIの場合は追加設定が必要
                 if "project_id" in self.config.extra_config:
                     os.environ["VERTEXAI_PROJECT"] = self.config.extra_config["project_id"]
                 if "location" in self.config.extra_config:
                     os.environ["VERTEXAI_LOCATION"] = self.config.extra_config["location"]
+                logger.info(f"   → VERTEX_AI 環境変数に設定")
             # 他のプロバイダーも同様に追加可能
+            
+    import litellm
+    litellm.set_verbose = True
     
     def generate(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """
@@ -99,6 +136,19 @@ class LiteLLMWrapper:
             )
             
             response_content = response.choices[0].message.content
+            
+            # contentがNoneまたは空の場合のエラーハンドリング
+            if response_content is None:
+                finish_reason = getattr(response.choices[0], 'finish_reason', 'unknown')
+                error_msg = f"LLMレスポンスがNoneです。finish_reason: {finish_reason}"
+                logger.error(error_msg)
+                if finish_reason == 'length' or finish_reason == 'max_tokens':
+                    error_msg += f" (max_tokens={self.config.max_tokens}を増やす必要があります)"
+                raise ValueError(error_msg)
+            
+            if response_content == "":
+                logger.warning("LLMが空文字列を返しました")
+                response_content = "{}"  # MemOS用の最小限有効JSON
             
             # ログ出力（デバッグ用）
             logger.debug(f"LiteLLM Response: model={response.model}, usage={response.usage}")
@@ -194,3 +244,48 @@ class LiteLLMWrapper:
             logger.error(f"💳 クォータ・制限エラー - 使用制限を確認してください: {error_info}")
         else:
             logger.error(f"❓ 予期しないエラー: {error_info}", exc_info=True)
+    
+    def embed(self, texts: List[str]) -> List[List[float]]:
+        """
+        テキストの埋め込みベクトル生成（エラー時は例外を再発生）
+        
+        Args:
+            texts: 埋め込み対象のテキストリスト
+            
+        Returns:
+            List[List[float]]: 埋め込みベクトルのリスト
+        """
+        try:
+            # LiteLLM embedding呼び出し
+            response = self.litellm.embedding(
+                model=self.config.model_name_or_path,
+                input=texts,
+                **self.config.extra_config  # プロバイダー固有設定
+            )
+            
+            # 埋め込みベクトルを抽出（LiteLLMのレスポンス形式に対応）
+            embeddings = []
+            for data in response.data:
+                if hasattr(data, 'embedding'):
+                    # オブジェクト形式の場合
+                    embeddings.append(data.embedding)
+                elif isinstance(data, dict) and 'embedding' in data:
+                    # 辞書形式の場合
+                    embeddings.append(data['embedding'])
+                else:
+                    data_str = str(data)
+                    if len(data_str) > 200:
+                        data_str = data_str[:200] + "..."
+                    logger.error(f"予期しないレスポンス形式: {type(data)} - {data_str}")
+                    raise ValueError(f"Embedding レスポンスの形式が正しくありません: {type(data)}")
+            
+            # ログ出力（デバッグ用）
+            logger.debug(f"LiteLLM Embedding: model={response.model}, tokens={response.usage.total_tokens if hasattr(response, 'usage') else 'N/A'}")
+            
+            return embeddings
+                
+        except Exception as e:
+            # 詳細なエラー情報を出力
+            self._log_detailed_error(e, "embed", [{"role": "user", "content": str(texts)}], {})
+            # エラーを再発生（フォールバックしない）
+            raise

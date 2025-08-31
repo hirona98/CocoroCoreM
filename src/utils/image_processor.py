@@ -23,24 +23,33 @@ async def generate_image_description(image_data_list: List[Dict[str, str]], coco
         画像の説明テキスト、または失敗時はNone
     """
     try:
-        import openai
-        from openai import AsyncOpenAI
+        import litellm
 
         if not image_data_list:
             return None
 
-        # 現在のキャラクター設定からAPIキーとモデルを取得
+        # キャラクター設定の検証
         current_character = cocoro_config.current_character
-        if current_character and current_character.visionApiKey:
-            api_key = current_character.visionApiKey
-            model = current_character.visionModel
-        else:
-            api_key = os.getenv("OPENAI_API_KEY")
-            model = "gpt-4o-mini"
-            
-        if not api_key:
-            logger.warning("APIキーが設定されていないため、画像説明の生成をスキップします")
+        if not current_character:
+            logger.error("❌ キャラクター設定がないため、画像説明の生成をスキップします")
             return None
+            
+        # visionModelの検証（設定必須）
+        if not hasattr(current_character, 'visionModel') or not current_character.visionModel:
+            logger.error("❌ visionModelが設定されていません。Setting.jsonでvisionModelを設定してください（例: 'openai/gpt-4o-mini'）")
+            return None
+            
+        # プロバイダー接頭辞の検証（他の設定と一貫性保持）
+        if "/" not in current_character.visionModel:
+            logger.error(f"❌ visionModelにプロバイダー接頭辞がありません: '{current_character.visionModel}' - 'provider/model' 形式で指定してください（例: openai/gpt-4o-mini）")
+            return None
+            
+        model = current_character.visionModel
+        
+        # Vision用APIキーの取得
+        api_key = current_character.get_vision_api_key()
+            
+        logger.info(f"🖼️ Vision設定: model={model}")
             
         # 画像説明システムプロンプト
         system_prompt = (
@@ -81,10 +90,19 @@ async def generate_image_description(image_data_list: List[Dict[str, str]], coco
                 })
         user_content.append({"type": "text", "text": user_text})
         
-        # OpenAI Vision APIで画像の説明を生成
-        client = AsyncOpenAI(api_key=api_key)
+        # LiteLLM Vision APIで画像の説明を生成
+        # 環境変数にAPIキーを設定
+        provider = model.split("/")[0] if "/" in model else "openai"
+        if provider == "openai":
+            os.environ["OPENAI_API_KEY"] = api_key
+        elif provider == "gemini":
+            os.environ["GEMINI_API_KEY"] = api_key
+        elif provider == "anthropic":
+            os.environ["ANTHROPIC_API_KEY"] = api_key
+        elif provider == "xai":
+            os.environ["XAI_API_KEY"] = api_key
         
-        response = await client.chat.completions.create(
+        response = await litellm.acompletion(
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
