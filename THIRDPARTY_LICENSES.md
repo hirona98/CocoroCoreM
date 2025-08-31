@@ -14,12 +14,7 @@
 pip install pip-licenses
 
 # ライセンス情報を自動生成
-pip-licenses --format=markdown --with-authors --with-urls --output-file=THIRDPARTY_LICENSES_AUTO.md
-
-# その他の便利な形式
-pip-licenses --format=json --output-file=licenses.json
-pip-licenses --format=csv --output-file=licenses.csv
-pip-licenses --format=plain-vertical --with-license-file --no-license-path > licenses_full.txt
+python -X utf8 -W ignore -m piplicenses --format=plain-vertical --with-license-file --no-license-path > licenses_full.txt
 ```
 
 THIRDPARTY_LICENSES.txt
