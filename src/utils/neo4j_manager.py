@@ -334,18 +334,25 @@ class Neo4jManager:
                     cmd, 
                     shell=True, 
                     capture_output=True, 
-                    text=True, 
+                    text=False,  # バイナリモードで読み取り
                     timeout=5
                 )
             
             result = await asyncio.get_event_loop().run_in_executor(None, run_wmic)
             
             if result.returncode != 0:
-                self.logger.error(f"wmicコマンド実行エラー: {result.stderr}")
+                self.logger.error("wmicコマンド実行エラー")
+                return
+            
+            # 出力をデコード
+            try:
+                stdout_text = result.stdout.decode('cp932', errors='replace')
+            except:
+                self.logger.error("wmicの出力をデコードできませんでした")
                 return
             
             # CSVの解析（ヘッダー行をスキップ）
-            lines = result.stdout.strip().split('\n')[1:]  # ヘッダーをスキップ
+            lines = stdout_text.strip().split('\n')[1:]  # ヘッダーをスキップ
             target_pids = []
             
             for line in lines:
