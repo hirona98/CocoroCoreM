@@ -35,16 +35,16 @@ class LiteLLMConfig:
     def _configure_reasoning_control(self):
         """推論モデル用のthinking制御設定"""
         reasoning_models = {
-            'gemini-2.5-flash': {'reasoning_effort': 'disable'},  # 推論無効化でコスト・速度最適化
+            'gemini-2.5-flash': {'reasoning_effort': 'disable'},  # Gemini: disable対応
             'gemini-2.5-pro': {'reasoning_effort': 'disable'},
             'deepseek-r1': {'reasoning_effort': 'low'},
             'o1-preview': {'reasoning_effort': 'medium'}, 
             'o1-mini': {'reasoning_effort': 'low'},
-            'gpt-5': {'reasoning_effort': 'disable'},  # GPT-5シリーズ推論無効化
-            'gpt-5-mini': {'reasoning_effort': 'disable'},
-            'gpt-5-nano': {'reasoning_effort': 'disable'},
-            'gpt-5-chat': {'reasoning_effort': 'disable'},
-            'grok-3-mini': {'reasoning_effort': 'disable'},  # xAI Grokシリーズ推論無効化
+            'gpt-5': {'reasoning_effort': 'minimal'},  # OpenAI: minimalを使用(disableは非対応)
+            'gpt-5-mini': {'reasoning_effort': 'minimal'},
+            'gpt-5-nano': {'reasoning_effort': 'minimal'},
+            'gpt-5-chat': {'reasoning_effort': 'minimal'},
+            'grok-3-mini': {'reasoning_effort': 'disable'},  # Grok: disable対応
             'grok-3-mini-beta': {'reasoning_effort': 'disable'},
             'grok-3-mini-fast': {'reasoning_effort': 'disable'},
             'grok-4': {'reasoning_effort': 'disable'},
