@@ -237,7 +237,7 @@ class CocoroMOSProduct(MOSProduct):
             mem_reader_config = LiteLLMConfig(
                 model_name=config['model'],
                 api_key=config['api_key'],
-                max_tokens=config.get('max_tokens', 2048),  # mem_reader用は多めに設定
+                max_tokens=config.get('max_tokens', 2048),  # mem_reader用は記憶要約で長い応答が必要
                 extra_config=config.get('extra_config', {})
             )
             
@@ -447,7 +447,7 @@ class CocoroMOSProduct(MOSProduct):
                     f"{memory.id.split('-')[0]}" if hasattr(memory, "id") else f"mem_{i}"
                 )
                 memory_content = (
-                    memory.memory[:500] if hasattr(memory, "memory") else str(memory)
+                    memory.memory if hasattr(memory, "memory") else str(memory)
                 )
                 
                 # メモリタイプ別に分類
@@ -491,7 +491,7 @@ class CocoroMOSProduct(MOSProduct):
             "text_mem"
         ]
         if text_mem_result:
-            memories = "\n".join([m.memory[:200] for m in text_mem_result[0]["memories"]])
+            memories = "\n".join([m.memory for m in text_mem_result[0]["memories"]])
         else:
             memories = ""
         

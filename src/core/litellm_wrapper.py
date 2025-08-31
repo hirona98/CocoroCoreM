@@ -20,12 +20,43 @@ class LiteLLMConfig:
                  extra_config: Dict[str, Any] = None, **kwargs):
         self.model_name_or_path = model_name
         self.api_key = api_key
-        self.max_tokens = kwargs.get('max_tokens', 1024)
+        
+        self.max_tokens = kwargs.get('max_tokens', 2048)
+        
         self.remove_think_prefix = kwargs.get('remove_think_prefix', False)
         self.extra_config = extra_config or {}
         
         # プロバイダー名を自動抽出（例: "xai/grok-2-latest" → "xai"）
         self.provider = model_name.split('/')[0] if '/' in model_name else 'openai'
+        
+        # 推論モデル用thinking制御設定を追加
+        self._configure_reasoning_control()
+        
+    def _configure_reasoning_control(self):
+        """推論モデル用のthinking制御設定"""
+        reasoning_models = {
+            'gemini-2.5-flash': {'reasoning_effort': 'disable'},  # 推論無効化でコスト・速度最適化
+            'gemini-2.5-pro': {'reasoning_effort': 'disable'},
+            'deepseek-r1': {'reasoning_effort': 'low'},
+            'o1-preview': {'reasoning_effort': 'medium'}, 
+            'o1-mini': {'reasoning_effort': 'low'},
+            'gpt-5': {'reasoning_effort': 'disable'},  # GPT-5シリーズ推論無効化
+            'gpt-5-mini': {'reasoning_effort': 'disable'},
+            'gpt-5-nano': {'reasoning_effort': 'disable'},
+            'gpt-5-chat': {'reasoning_effort': 'disable'},
+            'grok-3-mini': {'reasoning_effort': 'disable'},  # xAI Grokシリーズ推論無効化
+            'grok-3-mini-beta': {'reasoning_effort': 'disable'},
+            'grok-3-mini-fast': {'reasoning_effort': 'disable'},
+            'grok-4': {'reasoning_effort': 'disable'},
+        }
+        
+        # モデル名から推論制御設定を検出・適用
+        for reasoning_model, thinking_config in reasoning_models.items():
+            if reasoning_model in self.model_name_or_path:
+                # extra_configにthinking制御設定をマージ
+                self.extra_config.update(thinking_config)
+                logger.info(f"推論制御適用: {self.model_name_or_path} → {thinking_config}")
+                break
 
 
 class LiteLLMWrapper:
@@ -67,9 +98,9 @@ class LiteLLMWrapper:
                     self.original_handlers = original_handlers
                     
                 def emit(self, record):
-                    #if hasattr(record, 'msg') and isinstance(record.msg, str):
-                    #    if len(record.msg) > 300:
-                    #        record.msg = record.msg[:300] + "...[切り詰め]"
+                    if hasattr(record, 'msg') and isinstance(record.msg, str):
+                        if len(record.msg) > 300:
+                            record.msg = record.msg[:300] + "...[切り詰め]"
                     
                     # 元のハンドラーに転送
                     for handler in self.original_handlers:
@@ -110,9 +141,10 @@ class LiteLLMWrapper:
                     os.environ["VERTEXAI_LOCATION"] = self.config.extra_config["location"]
                 logger.info(f"   → VERTEX_AI 環境変数に設定")
             # 他のプロバイダーも同様に追加可能
-            
-    import litellm
-    litellm.set_verbose = True
+
+    # デバッグ出力用      
+    # import litellm
+    # litellm.set_verbose = True
     
     def generate(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """

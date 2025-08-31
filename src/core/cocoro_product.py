@@ -80,7 +80,7 @@ class CocoroProductWrapper:
             litellm_config = {
                 'model': llm_model,
                 'api_key': api_key,
-                'max_tokens': 1024,
+                'max_tokens': 2048,
                 'extra_config': {},
                 # 埋め込み設定を追加（既存フィールド使用、設定必須）
                 'embedding_model': current_character.embeddedModel,

@@ -62,7 +62,7 @@ class LoggingConfig(BaseModel):
     # ログ長制限関連
     enable_truncation: bool = True
     truncate_marker: str = "【切り詰め】"
-    max_message_length: int = 2000  # デフォルト値
+    max_message_length: int = 2048  # デフォルト値
     level_specific_lengths: Dict[str, int] = {
         "DEBUG": 200,
         "INFO": 200,
