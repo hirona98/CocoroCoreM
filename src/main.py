@@ -200,6 +200,23 @@ class CocoroCoreMApp:
             self.config = CocoroAIConfig.load(config_path)
             logger.info(f"設定読み込み完了: キャラクター={self.config.character_name}")
             
+            # LLM機能使用の必要性をチェック
+            current_character = self.config.current_character
+            if not current_character:
+                raise ConfigurationError("現在のキャラクターが設定されていません")
+            
+            is_llm_enabled = current_character.isUseLLM
+            is_memory_enabled = current_character.isEnableMemory
+            
+            # 起動判定ロジック
+            if not is_llm_enabled:
+                logger.info(f"キャラクター '{current_character.modelName}': LLM無効")
+                logger.info("LLMが無効になっているためCocoroCoreMを終了します")
+                # 正常終了として扱う（例外を投げない）
+                return False  # 起動スキップを示すフラグ
+            else:
+                logger.info(f"キャラクター '{current_character.modelName}': LLM有効で起動します")
+            
             # FastAPIアプリケーション作成（lifespanイベント付き）
             @asynccontextmanager
             async def lifespan(app: FastAPI):
@@ -312,6 +329,7 @@ class CocoroCoreMApp:
                 raise
             
             logger.info("CocoroCoreM初期化完了")
+            return True  # 正常起動完了
             
         except Exception as e:
             logger.error(f"アプリケーション初期化エラー: {e}")
@@ -418,10 +436,15 @@ async def main():
                 loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(signal_handler(s, None)))
         
         # 初期化
-        await app.initialize()
+        should_start = await app.initialize()
         
-        # サーバー起動
-        await app.start_server()
+        # 初期化結果に基づくサーバー起動判定
+        if should_start:
+            # サーバー起動
+            await app.start_server()
+        else:
+            # 起動スキップ - 正常終了
+            return
         
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt受信")
