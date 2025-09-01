@@ -35,6 +35,14 @@ class CharacterData(BaseModel):
     memoryId: str = ""
     embeddedApiKey: str = ""
     embeddedModel: str = ""
+    embeddedDimension: int = Field(default=3072, description="ベクトル埋め込みの次元数")
+    
+    @validator('embeddedDimension', pre=True)
+    def validate_embedded_dimension(cls, v):
+        """embeddedDimensionを文字列からintに変換"""
+        if isinstance(v, str):
+            return int(v)
+        return v
     
     def get_api_key(self) -> str:
         """APIキーを取得（空の場合はダミー値を返す）"""

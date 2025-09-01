@@ -316,7 +316,7 @@ class CocoroProductWrapper:
             "use_multi_db": False,  # Community Editionでは必須
             "user_name": self.current_user_id,  # キャラクター別論理的分離
             "auto_create": False,
-            "embedding_dimension": 3072  # text-embedding-3-large の次元
+            "embedding_dimension": current_character.embeddedDimension  # 設定ファイルから取得
         }
         
         config_data = {
