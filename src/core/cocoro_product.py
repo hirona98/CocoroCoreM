@@ -203,9 +203,8 @@ class CocoroProductWrapper:
             
             # トークナイザーを無効化して文字ベースチャンクに切り替え（パフォーマンス最適化）
             if hasattr(self.mos_product, 'tokenizer'):
-                logger.info(f"トークナイザーを無効化（パフォーマンス最適化）: {self.mos_product.tokenizer is not None}")
+                logger.info(f"トークナイザーを無効化: {self.mos_product.tokenizer is not None}")
                 self.mos_product.tokenizer = None
-                logger.info("文字ベースチャンクに切り替え完了")
             
             logger.info(f"CocoroProductWrapper初期化完了: ユーザー={self.current_user_id}")
             
