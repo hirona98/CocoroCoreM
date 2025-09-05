@@ -5,7 +5,6 @@ CocoroCoreM 画像処理モジュール
 """
 
 import logging
-import os
 from typing import Optional, List, Dict, Any
 import asyncio
 
@@ -91,17 +90,6 @@ async def generate_image_description(image_data_list: List[Dict[str, str]], coco
         user_content.append({"type": "text", "text": user_text})
         
         # LiteLLM Vision APIで画像の説明を生成
-        # 環境変数にAPIキーを設定
-        provider = model.split("/")[0] if "/" in model else "openai"
-        if provider == "openai":
-            os.environ["OPENAI_API_KEY"] = api_key
-        elif provider == "gemini":
-            os.environ["GEMINI_API_KEY"] = api_key
-        elif provider == "anthropic":
-            os.environ["ANTHROPIC_API_KEY"] = api_key
-        elif provider == "xai":
-            os.environ["XAI_API_KEY"] = api_key
-        
         response = await litellm.acompletion(
             model=model,
             messages=[
