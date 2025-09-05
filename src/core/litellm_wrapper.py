@@ -26,6 +26,7 @@ class LiteLLMConfig:
         self.remove_think_prefix = kwargs.get('remove_think_prefix', False)
         self.extra_config = extra_config or {}
         
+        
         # プロバイダー名を自動抽出（例: "xai/grok-2-latest" → "xai"）
         self.provider = model_name.split('/')[0] if '/' in model_name else 'openai'
         
@@ -34,20 +35,26 @@ class LiteLLMConfig:
         
     def _configure_reasoning_control(self):
         """推論モデル用のthinking制御設定"""
+        # Note: {'reasoning_effort': ''} のような無効な値は
+        # _prepare_completion_params で動的に処理され、drop_paramsが有効化される
         reasoning_models = {
-            'gemini-2.5-flash': {'reasoning_effort': 'disable'},  # Gemini: disable対応
-            'gemini-2.5-pro': {'reasoning_effort': 'disable'},
-            'deepseek-r1': {'reasoning_effort': 'low'},
-            'o1-preview': {'reasoning_effort': 'medium'}, 
+            'gemini-2.5-flash': {'reasoning_effort': 'disable'},
+            'gemini-2.5-flash-lite': {'reasoning_effort': 'disable'},
+            'gemini-2.5-pro': {'reasoning_effort': ''},
+
+            'deepseek-r1': {'reasoning_effort': ''},
+            'deepseek-reasoner': {'reasoning_effort': ''},
+
             'o1-mini': {'reasoning_effort': 'low'},
-            'gpt-5': {'reasoning_effort': 'minimal'},  # OpenAI: minimalを使用(disableは非対応)
+            'o3-mini': {'reasoning_effort': 'low'},
+
+            'gpt-5': {'reasoning_effort': 'minimal'},
             'gpt-5-mini': {'reasoning_effort': 'minimal'},
             'gpt-5-nano': {'reasoning_effort': 'minimal'},
-            'gpt-5-chat': {'reasoning_effort': 'minimal'},
-            'grok-3-mini': {'reasoning_effort': 'disable'},  # Grok: disable対応
-            'grok-3-mini-beta': {'reasoning_effort': 'disable'},
-            'grok-3-mini-fast': {'reasoning_effort': 'disable'},
-            'grok-4': {'reasoning_effort': 'disable'},
+
+            'grok-3-mini': {'reasoning_effort': 'low'},
+            'grok-3-mini-fast': {'reasoning_effort': 'low'},
+            'grok-4': {'reasoning_effort': ''},
         }
         
         # モデル名から推論制御設定を検出・適用
@@ -145,6 +152,27 @@ class LiteLLMWrapper:
                 logger.info(f"   → VERTEX_AI 環境変数に設定")
             # 他のプロバイダーも同様に追加可能
     
+    def _prepare_completion_params(self, **kwargs) -> Dict[str, Any]:
+        """
+        completion関数用のパラメータを準備し、無効なreasoning_effortを処理
+        
+        Args:
+            **kwargs: 動的パラメータ
+            
+        Returns:
+            Dict[str, Any]: 処理済みのパラメータ辞書
+        """
+        # extra_configとkwargsをマージしてチェック
+        params = {**self.config.extra_config, **kwargs}
+        
+        # reasoning_effortが空文字列の場合は削除してdrop_paramsを有効化
+        if params.get('reasoning_effort') == '':
+            params.pop('reasoning_effort', None)
+            params['drop_params'] = True
+            logger.debug("空のreasoning_effortを検出 → パラメータ削除とdrop_params有効化")
+        
+        return params
+    
     def generate(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """
         LLMレスポンス生成（エラー時は例外を再発生）
@@ -157,13 +185,15 @@ class LiteLLMWrapper:
             str: 生成されたレスポンス
         """
         try:
+            # パラメータを準備（空のreasoning_effortをチェック・処理）
+            params = self._prepare_completion_params(**kwargs)
+            
             # LiteLLM completion呼び出し
             response = self.litellm.completion(
                 model=self.config.model_name_or_path,
                 messages=messages,
                 max_tokens=self.config.max_tokens,
-                **self.config.extra_config,  # プロバイダー固有設定
-                **kwargs  # 動的パラメータ
+                **params
             )
             
             response_content = response.choices[0].message.content
@@ -204,14 +234,16 @@ class LiteLLMWrapper:
             str: ストリーミングチャンク
         """
         try:
+            # パラメータを準備（空のreasoning_effortをチェック・処理）
+            params = self._prepare_completion_params(**kwargs)
+            
             # LiteLLM completion（ストリーミング）呼び出し
             response = self.litellm.completion(
                 model=self.config.model_name_or_path,
                 messages=messages,
                 stream=True,  # ストリーミング有効
                 max_tokens=self.config.max_tokens,
-                **self.config.extra_config,  # プロバイダー固有設定
-                **kwargs  # 動的パラメータ
+                **params
             )
             
             reasoning_started = False
