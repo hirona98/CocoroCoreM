@@ -89,6 +89,14 @@ class WebSocketChatManager:
         except Exception as e:
             logger.debug(f"デバッグ出力エラー: {e}")
     
+    def _remove_memory_references(self, text: str) -> str:
+        """記憶参照タグを除去"""
+        import re
+        # MemOSの記憶参照パターン [8文字の16進数] を除去
+        pattern = r'\[[a-f0-9]{8}\]'
+        cleaned_text = re.sub(pattern, '', text)
+        return cleaned_text
+    
     
     def _find_last_sentence_boundary(self, buffer: str) -> int:
         """80文字以上のバッファで最後の句読点位置を探す"""
@@ -292,7 +300,10 @@ class WebSocketChatManager:
                                     #      短期履歴（chat_history.chat_history）は更新しないため、
                                     #      CocoroCoreMでの明示的な短期履歴更新は必須（重複なし）
                                     chat_history.chat_history.append({"role": "user", "content": enhanced_query})
-                                    chat_history.chat_history.append({"role": "assistant", "content": full_response.strip()})
+                                    
+                                    # 応答から記憶参照タグを除去してから履歴に追加
+                                    cleaned_response = self._remove_memory_references(full_response.strip())
+                                    chat_history.chat_history.append({"role": "assistant", "content": cleaned_response})
                                     
                                     # メモリ効率のため履歴を最新20件（10ターン）に制限
                                     if len(chat_history.chat_history) > 20:
@@ -349,9 +360,10 @@ class WebSocketChatManager:
                     message_type = ws_message.get("type")
                     
                     if message_type == "text":
-                        # textタイプはバッファに蓄積
+                        # textタイプはバッファに蓄積（記憶参照タグを除去）
                         content = ws_message.get("data", {}).get("content", "")
-                        session_info["text_buffer"] += content
+                        cleaned_content = self._remove_memory_references(content)
+                        session_info["text_buffer"] += cleaned_content
                         
                         # バッファ送信判定
                         await self._flush_text_buffer(session_info, websocket, session_id)
