@@ -92,9 +92,20 @@ class WebSocketChatManager:
     def _remove_memory_references(self, text: str) -> str:
         """記憶参照タグを除去"""
         import re
-        # MemOSの記憶参照パターン [8文字の16進数] を除去
-        pattern = r'\[[a-f0-9]{8}\]'
-        cleaned_text = re.sub(pattern, '', text)
+        # MemOSの記憶参照パターンを除去
+        # [8文字の16進数] と (8文字の16進数) の両方に対応
+        patterns = [
+            r'\[[a-f0-9]{8}\]',  # [b2fff1b1] 形式
+            r'\([a-f0-9]{8}\)',  # (b2fff1b1) 形式
+            r'\[[a-f0-9]{8}:\w+\]',  # [1:b2fff1b1] 形式（念のため）
+        ]
+        
+        cleaned_text = text
+        for pattern in patterns:
+            cleaned_text = re.sub(pattern, '', cleaned_text)
+        
+        # 余分な空白を整理
+        cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
         return cleaned_text
     
     
