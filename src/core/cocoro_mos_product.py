@@ -433,31 +433,28 @@ class CocoroMOSProduct(MOSProduct):
             logger.warning("CocoroAIプロンプト未設定、MemOSデフォルトプロンプトを使用")
             return super()._build_enhance_system_prompt(user_id, memories_all)
         
-        # メモリ情報の追加処理（MemOSの標準フォーマットに従う）
+        # メモリ情報の追加処理（CocoroAI専用：記憶IDを除去してコンテンツのみ提供）
         if memories_all:
-            personal_memory_context = "\n\n## Available ID and PersonalMemory Memories:\n"
-            outer_memory_context = "\n\n## Available ID and OuterMemory Memories:\n"
+            personal_memory_context = "\n\n## Available PersonalMemory Memories:\n"
+            outer_memory_context = "\n\n## Available OuterMemory Memories:\n"
             
             personal_memory_count = 0
             outer_memory_count = 0
             
             for i, memory in enumerate(memories_all, 1):
-                # メモリIDとコンテンツの取得（MemOSと同じ形式）
-                memory_id = (
-                    f"{memory.id.split('-')[0]}" if hasattr(memory, "id") else f"mem_{i}"
-                )
+                # メモリコンテンツのみ取得（記憶IDは除去）
                 memory_content = (
                     memory.memory if hasattr(memory, "memory") else str(memory)
                 )
                 
-                # メモリタイプ別に分類
+                # メモリタイプ別に分類（記憶IDなしでコンテンツのみ提供）
                 if memory.metadata.memory_type != "OuterMemory":
-                    personal_memory_context += f"{memory_id}: {memory_content}\n"
+                    personal_memory_context += f"- {memory_content}\n"
                     personal_memory_count += 1
                 else:
                     # OuterMemoryの場合は改行を除去
                     memory_content = memory_content.replace("\n", " ")
-                    outer_memory_context += f"{memory_id}: {memory_content}\n"
+                    outer_memory_context += f"- {memory_content}\n"
                     outer_memory_count += 1
             
             # 記憶がある場合は、CocoroAIプロンプト + 記憶機能指示 + メモリ情報
