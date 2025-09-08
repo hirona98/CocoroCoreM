@@ -159,6 +159,104 @@ class WebSocketChatManager:
         
         return cleaned_text, reminders
     
+    def _process_mos_streaming(self, app, enhanced_query, request_data, session_queue, main_loop, session_id):
+        """MOSProductストリーミング処理とキューへの送信"""
+        full_response = ""
+        chunk_count = 0
+        current_user_id = app.cocoro_product.current_user_id
+        cube_id = app.cocoro_product.get_current_cube_id()
+        
+        logger.info(f"MOSProduct処理開始: session_id={session_id}, cube_id={cube_id}")
+        
+        for sse_chunk in app.cocoro_product.mos_product.chat_with_references(
+            query=enhanced_query,
+            user_id=current_user_id,
+            cube_id=cube_id,
+            internet_search=request_data.get("internet_search", False)
+        ):
+            chunk_count += 1
+            
+            # アシスタントの回答を収集（会話履歴更新のため）
+            if '"type": "text"' in sse_chunk:
+                try:
+                    import json
+                    json_data = json.loads(sse_chunk[6:].strip())  # "data: " プレフィックス除去
+                    if json_data.get("type") == "text":
+                        full_response += json_data.get("data", "")
+                except:
+                    pass  # JSON解析エラーは無視
+            
+            # デバッグ出力
+            self._log_chunk_debug(sse_chunk, chunk_count)
+            
+            # キューに結果を追加（完全非同期）
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    session_queue.put(sse_chunk),
+                    main_loop
+                )
+            except Exception as queue_error:
+                logger.error(f"キュー送信エラー: {queue_error}")
+                break
+            
+            # ストリーミング終了シグナル検出
+            if '"type": "end"' in sse_chunk:
+                logger.info(f"MOSProduct ストリーミング完了: session_id={session_id}, チャンク数={chunk_count}")
+                return full_response, current_user_id
+        
+        return full_response, current_user_id
+    
+    def _update_chat_history_immediately(self, app, enhanced_query, full_response, current_user_id, session_id, main_loop):
+        """会話履歴の即時更新とタグ処理"""
+        try:
+            if not full_response.strip():
+                return
+                
+            user_id = current_user_id
+            
+            # MemOSの会話履歴マネージャーに直接アクセス
+            if user_id not in app.cocoro_product.mos_product.chat_history_manager:
+                app.cocoro_product.mos_product._register_chat_history(user_id)
+            
+            chat_history = app.cocoro_product.mos_product.chat_history_manager[user_id]
+            
+            # ユーザークエリを履歴に追加
+            chat_history.chat_history.append({"role": "user", "content": enhanced_query})
+            
+            # 応答から記憶参照タグとリマインダータグを除去
+            memory_cleaned_response = self._remove_memory_references(full_response.strip())
+            final_cleaned_response, reminders = self._extract_reminder_tags(memory_cleaned_response)
+            
+            # リマインダーがあれば登録
+            if reminders and hasattr(app, 'reminder_manager') and app.reminder_manager:
+                self._register_reminders_async(app, reminders, enhanced_query, main_loop)
+            
+            # クリーンな応答を履歴に追加
+            chat_history.chat_history.append({"role": "assistant", "content": final_cleaned_response})
+            
+            # メモリ効率のため履歴を最新20件（10ターン）に制限
+            if len(chat_history.chat_history) > 20:
+                chat_history.chat_history = chat_history.chat_history[-20:]
+            
+            logger.info(f"即時会話履歴更新完了: session_id={session_id}, 履歴件数={len(chat_history.chat_history)}")
+            
+        except Exception as history_error:
+            logger.error(f"即時会話履歴更新エラー: {history_error}", exc_info=True)
+    
+    def _register_reminders_async(self, app, reminders, enhanced_query, main_loop):
+        """リマインダーの非同期登録"""
+        try:
+            for reminder in reminders:
+                asyncio.run_coroutine_threadsafe(
+                    app.reminder_manager.add_reminder(
+                        reminder["datetime"],
+                        reminder["requirement"] or enhanced_query
+                    ),
+                    main_loop
+                )
+            logger.info(f"リマインダー登録実行: {len(reminders)}件")
+        except Exception as reminder_error:
+            logger.error(f"リマインダー登録エラー: {reminder_error}", exc_info=True)
     
     def _find_last_sentence_boundary(self, buffer: str) -> int:
         """80文字以上のバッファで最後の句読点位置を探す"""
@@ -299,102 +397,18 @@ class WebSocketChatManager:
                 - オリジナルMemOS: LLM応答生成 → 長期記憶保存完了 → "type":"end"送信
                 - 修正版: LLM応答生成 → "type":"end"送信 → 記憶保存は非同期継続
                 """
-                full_response = ""  # ストリーミングで分割されたアシスタントの回答を蓄積・復元
                 try:
-                    cube_id = app.cocoro_product.get_current_cube_id()
+                    # MOSProductのストリーミング処理
+                    full_response, current_user_id = self._process_mos_streaming(
+                        app, enhanced_query, request_data, session_queue, main_loop, session_id
+                    )
                     
-                    logger.info(f"MOSProduct処理開始: session_id={session_id}, cube_id={cube_id}")
-                    
-                    # MOSProductのストリーミング処理（同期処理）
-                    chunk_count = 0
-                    current_user_id = app.cocoro_product.current_user_id  # 実際のユーザーIDを取得
-                    for sse_chunk in app.cocoro_product.mos_product.chat_with_references(
-                        query=enhanced_query,
-                        user_id=current_user_id,
-                        cube_id=cube_id,
-                        internet_search=request_data.get("internet_search", False)
-                    ):
-                        chunk_count += 1
+                    # ストリーミング完了後の即時会話履歴更新
+                    if full_response.strip():
+                        self._update_chat_history_immediately(
+                            app, enhanced_query, full_response, current_user_id, session_id, main_loop
+                        )
                         
-                        # アシスタントの回答を収集（会話履歴更新のため）
-                        # MemOSは応答をストリーミングで分割送信するため、完全な回答を再構築する必要
-                        if '"type": "text"' in sse_chunk:
-                            try:
-                                import json
-                                json_data = json.loads(sse_chunk[6:].strip())  # "data: " プレフィックス除去
-                                if json_data.get("type") == "text":
-                                    full_response += json_data.get("data", "")
-                            except:
-                                pass  # JSON解析エラーは無視（ストリーミングの途中で不完全なデータが来る可能性）
-                        
-                        # デバッグ出力
-                        self._log_chunk_debug(sse_chunk, chunk_count)
-                        
-                        # キューに結果を追加（完全非同期）
-                        try:
-                            asyncio.run_coroutine_threadsafe(
-                                session_queue.put(sse_chunk),
-                                main_loop
-                            )
-                        except Exception as queue_error:
-                            logger.error(f"キュー送信エラー: {queue_error}")
-                            break
-                        
-                        # ストリーミング終了シグナル検出（但しbreakしない）
-                        # 理由: 高速レスポンス化のため、MemOSの長期記憶保存完了を待たずに応答完了
-                        if '"type": "end"' in sse_chunk:
-                            logger.info(f"MOSProduct ストリーミング完了: session_id={session_id}, チャンク数={chunk_count} - 記憶保存処理継続中")
-                            
-                            # 【重要】高速レスポンス化の副作用対策
-                            # 問題: MemOSの会話履歴更新も非同期になり、次回リクエスト時に文脈が失われる
-                            # 解決: 会話履歴のみ即時に手動更新（長期記憶は引き続きMemOSが非同期処理）
-                            try:
-                                if full_response.strip():
-                                    user_id = current_user_id  # 実際のユーザーIDを使用
-                                    
-                                    # MemOSの会話履歴マネージャーに直接アクセス
-                                    if user_id not in app.cocoro_product.mos_product.chat_history_manager:
-                                        app.cocoro_product.mos_product._register_chat_history(user_id)
-                                    
-                                    chat_history = app.cocoro_product.mos_product.chat_history_manager[user_id]
-                                    
-                                    # 会話履歴に即時追加（MemOSのchat_history.chat_historyと同じ形式）
-                                    # 注意: MemOSは長期記憶（TreeTextMemory）のみ更新し、
-                                    #      短期履歴（chat_history.chat_history）は更新しないため、
-                                    #      CocoroCoreMでの明示的な短期履歴更新は必須（重複なし）
-                                    chat_history.chat_history.append({"role": "user", "content": enhanced_query})
-                                    
-                                    # 応答から記憶参照タグとリマインダータグを除去
-                                    memory_cleaned_response = self._remove_memory_references(full_response.strip())
-                                    final_cleaned_response, reminders = self._extract_reminder_tags(memory_cleaned_response)
-                                    
-                                    # リマインダーがあれば登録（非同期処理として実行）
-                                    if reminders and hasattr(app, 'reminder_manager') and app.reminder_manager:
-                                        try:
-                                            # 非同期でリマインダー登録を実行
-                                            for reminder in reminders:
-                                                asyncio.run_coroutine_threadsafe(
-                                                    app.reminder_manager.add_reminder(
-                                                        reminder["datetime"],
-                                                        reminder["requirement"] or enhanced_query
-                                                    ),
-                                                    main_loop
-                                                )
-                                            logger.info(f"リマインダー登録実行: {len(reminders)}件")
-                                        except Exception as reminder_error:
-                                            logger.error(f"リマインダー登録エラー: {reminder_error}", exc_info=True)
-                                    
-                                    # クリーンな応答を履歴に追加
-                                    chat_history.chat_history.append({"role": "assistant", "content": final_cleaned_response})
-                                    
-                                    # メモリ効率のため履歴を最新20件（10ターン）に制限
-                                    if len(chat_history.chat_history) > 20:
-                                        chat_history.chat_history = chat_history.chat_history[-20:]
-                                    
-                                    logger.info(f"即時会話履歴更新完了: session_id={session_id}, 履歴件数={len(chat_history.chat_history)}")
-                            except Exception as history_error:
-                                logger.error(f"即時会話履歴更新エラー: {history_error}", exc_info=True)
-                            
                 except Exception as e:
                     logger.error(f"MOSProduct処理エラー: {e}", exc_info=True)
                     # エラーをキューに送信
