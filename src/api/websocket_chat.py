@@ -110,6 +110,55 @@ class WebSocketChatManager:
         cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
         return cleaned_text
     
+    def _extract_reminder_tags(self, text: str) -> tuple[str, list]:
+        """
+        リマインダータグを検出・抽出し、クリーンなテキストとリマインダー情報を返す
+        
+        Args:
+            text: 検出対象のテキスト
+            
+        Returns:
+            (クリーンなテキスト, リマインダー情報のリスト)
+        """
+        import re
+        from datetime import datetime
+        
+        # パターン: [REMINDER:2024-09-07T15:00:00|会議の時間]
+        reminder_pattern = r'\[REMINDER:([^\|\]]+)(?:\|([^\]]+))?\]'
+        matches = re.findall(reminder_pattern, text)
+        
+        reminders = []
+        for match in matches:
+            datetime_str = match[0].strip()
+            message = match[1].strip() if len(match) > 1 and match[1] else ""
+            
+            # ISO形式の日時検証
+            try:
+                parsed_datetime = datetime.fromisoformat(datetime_str)
+                
+                # 過去の時刻チェック
+                if parsed_datetime <= datetime.now():
+                    logger.warning(f"過去の時刻が指定されました: {datetime_str}")
+                    continue
+                
+                reminders.append({
+                    "datetime": datetime_str,
+                    "requirement": message
+                })
+                logger.debug(f"リマインダータグ検出: {datetime_str} - {message}")
+                
+            except ValueError:
+                logger.warning(f"無効なリマインダー日時形式: {datetime_str}")
+                continue
+        
+        # リマインダータグを除去してクリーンなテキストを作成
+        cleaned_text = re.sub(reminder_pattern, '', text)
+        
+        # 余分な空白を整理
+        cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
+        
+        return cleaned_text, reminders
+    
     
     def _find_last_sentence_boundary(self, buffer: str) -> int:
         """80文字以上のバッファで最後の句読点位置を探す"""
@@ -157,6 +206,7 @@ class WebSocketChatManager:
             remaining_buffer = buffer[boundary_pos:]
         
         if send_content:
+            # リマインダーの設定文字列はわかりやすいように残しておく
             # バッファの内容を送信
             ws_message = {
                 "session_id": session_id,
@@ -314,9 +364,28 @@ class WebSocketChatManager:
                                     #      CocoroCoreMでの明示的な短期履歴更新は必須（重複なし）
                                     chat_history.chat_history.append({"role": "user", "content": enhanced_query})
                                     
-                                    # 応答から記憶参照タグを除去してから履歴に追加
-                                    cleaned_response = self._remove_memory_references(full_response.strip())
-                                    chat_history.chat_history.append({"role": "assistant", "content": cleaned_response})
+                                    # 応答から記憶参照タグとリマインダータグを除去
+                                    memory_cleaned_response = self._remove_memory_references(full_response.strip())
+                                    final_cleaned_response, reminders = self._extract_reminder_tags(memory_cleaned_response)
+                                    
+                                    # リマインダーがあれば登録（非同期処理として実行）
+                                    if reminders and hasattr(app, 'reminder_manager') and app.reminder_manager:
+                                        try:
+                                            # 非同期でリマインダー登録を実行
+                                            for reminder in reminders:
+                                                asyncio.run_coroutine_threadsafe(
+                                                    app.reminder_manager.add_reminder(
+                                                        reminder["datetime"],
+                                                        reminder["requirement"] or enhanced_query
+                                                    ),
+                                                    main_loop
+                                                )
+                                            logger.info(f"リマインダー登録実行: {len(reminders)}件")
+                                        except Exception as reminder_error:
+                                            logger.error(f"リマインダー登録エラー: {reminder_error}", exc_info=True)
+                                    
+                                    # クリーンな応答を履歴に追加
+                                    chat_history.chat_history.append({"role": "assistant", "content": final_cleaned_response})
                                     
                                     # メモリ効率のため履歴を最新20件（10ターン）に制限
                                     if len(chat_history.chat_history) > 20:
@@ -481,6 +550,15 @@ class WebSocketChatManager:
             window_title = desktop_context.get('window_title', '')
             base_query = f"【デスクトップ監視】{app_name}で作業中\nウィンドウタイトル: {window_title}\n\n{base_query}"
         
+        # リマインダーの場合
+        if chat_type == "reminder" and request_data.get("reminder"):
+            reminder = request_data["reminder"]
+            reminder_requirement = reminder.get('requirement', '')
+            triggered_at = reminder.get('triggered_at', '')
+            
+            # リマインダー専用プロンプト構築
+            return self._build_reminder_prompt(reminder_requirement, triggered_at)
+        
         return base_query
     
     async def _handle_image_processing_error(self, request_data: dict, chat_type: str, base_query: str, app, error_msg: str) -> str:
@@ -525,6 +603,22 @@ class WebSocketChatManager:
             " LINEから写真が送られてきたよ。美味しそうな料理だね。\n"
             " Slackからプロジェクトの進捗報告がありました。順調そうで良かったですね。\n"
             " Twitterのトレンド通知で桜の写真が来てる。もう春なんだなぁ。"
+        )
+
+    def _build_reminder_prompt(self, reminder_requirement: str, triggered_at: str = "") -> str:
+        """リマインダー用プロンプトを構築"""
+        return (
+            f"設定されたリマインダーの時間になりました。\n\n"
+            f"リマインダー要件: {reminder_requirement}\n\n"
+            "以下の形式で、あなたの**キャラクター性を活かして**ユーザーに知らせてください：\n"
+            "- 時間になったことを伝える\n"
+            "- 必要に応じて励ましや応援を加える\n"
+            "- 2～3文で完結させる\n\n"
+            "例：\n"
+            " 会議の時間だよ！準備はできた？\n"
+            " お薬を飲む時間になりました。忘れずにね。\n"
+            " 休憩時間だよ〜。少し休んでリフレッシュしよう！\n"
+            " ランチタイムです。美味しいものを食べて来てくださいね。"
         )
 
 

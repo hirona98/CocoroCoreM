@@ -147,6 +147,7 @@ logger = logging.getLogger(__name__)
 from core.config_manager import CocoroAIConfig, ConfigurationError, load_neo4j_config
 # CocoroProductWrapperは重いmemosモジュールを含むため使用時に遅延インポート
 from utils.neo4j_manager import Neo4jManager
+from utils.reminder_manager import ReminderManager
 from api.health import router as health_router
 from api.control import router as control_router
 from api.websocket_chat import router as websocket_router
@@ -161,6 +162,7 @@ class CocoroCoreMApp:
         self.config: Optional[CocoroAIConfig] = None
         self.neo4j_manager: Optional[Neo4jManager] = None
         self.cocoro_product: Optional[Any] = None  # CocoroProductWrapper（遅延インポート）
+        self.reminder_manager: Optional[ReminderManager] = None  # リマインダー管理
         self.server_task: Optional[asyncio.Task] = None
         self.uvicorn_server: Optional[uvicorn.Server] = None
         self._shutdown_event = asyncio.Event()
@@ -328,6 +330,18 @@ class CocoroCoreMApp:
                 logger.error(f"MOSProduct初期化エラー: {e}")
                 raise
             
+            # リマインダーマネージャー初期化
+            try:
+                logger.info("リマインダーマネージャーを初期化しています...")
+                self.reminder_manager = ReminderManager(app_instance=self)
+                # 起動時に既存のアクティブリマインダーを再読み込み
+                await self.reminder_manager.reload_active_reminders()
+                logger.info("リマインダーマネージャー初期化完了")
+            except Exception as e:
+                logger.error(f"リマインダーマネージャー初期化エラー: {e}")
+                # リマインダー機能が失敗しても起動は継続
+                self.reminder_manager = None
+            
             logger.info("CocoroCoreM初期化完了")
             return True  # 正常起動完了
             
@@ -372,6 +386,14 @@ class CocoroCoreMApp:
                 logger.info("WebSocketマネージャー停止完了")
             except Exception as e:
                 logger.warning(f"WebSocketマネージャー停止エラー: {e}")
+            
+            # リマインダーマネージャー停止
+            if self.reminder_manager:
+                try:
+                    self.reminder_manager.shutdown()
+                    logger.info("リマインダーマネージャー停止完了")
+                except Exception as e:
+                    logger.warning(f"リマインダーマネージャー停止エラー: {e}")
             
             # MOSProduct停止
             if self.cocoro_product:

@@ -82,6 +82,12 @@ class NotificationData(BaseModel):
     original_message: str = Field(..., description="元の通知メッセージ")
 
 
+class ReminderData(BaseModel):
+    """リマインダーデータ"""
+    requirement: str = Field(..., description="リマインダー要件")
+    triggered_at: str = Field(..., description="トリガー時刻（ISO形式）")
+
+
 class DesktopContext(BaseModel):
     """デスクトップ監視コンテキスト"""
     window_title: str = Field(..., description="ウィンドウタイトル")
@@ -100,9 +106,10 @@ class HistoryMessage(BaseModel):
 class ChatRequest(BaseModel):
     """チャットAPIリクエスト"""
     query: str = Field(..., description="ユーザークエリ")
-    chat_type: Literal["text", "text_image", "notification", "desktop_watch"] = Field(..., description="チャットタイプ")
+    chat_type: Literal["text", "text_image", "notification", "desktop_watch", "reminder"] = Field(..., description="チャットタイプ")
     images: Optional[List[ImageData]] = Field(default=None, description="画像データ配列")
     notification: Optional[NotificationData] = Field(default=None, description="通知データ")
+    reminder: Optional[ReminderData] = Field(default=None, description="リマインダーデータ")
     desktop_context: Optional[DesktopContext] = Field(default=None, description="デスクトップコンテキスト")
     history: Optional[List[HistoryMessage]] = Field(default=None, description="会話履歴")
     internet_search: Optional[bool] = Field(default=False, description="インターネット検索有効化")
