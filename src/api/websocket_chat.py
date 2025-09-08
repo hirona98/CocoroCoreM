@@ -95,11 +95,19 @@ class WebSocketChatManager:
         # MemOSの記憶参照パターンを除去
         # 半角・全角括弧、角括弧の全パターンに対応
         patterns = [
-            r'\[[a-f0-9]{8}\]',      # [b2fff1b1] 形式
-            r'\([a-f0-9]{8}\)',      # (b2fff1b1) 形式
-            r'（[a-f0-9]{8}）',      # （b85e0501） 全角括弧形式
-            r'［[a-f0-9]{8}］',      # ［b85e0501］ 全角角括弧形式
-            r'\[[a-f0-9]{8}:\w+\]',  # [1:b2fff1b1] 形式（念のため）
+            r'\[[a-f0-9]{8}\]',             # [b2fff1b1] 形式
+            r'\([a-f0-9]{8}\)',             # (b2fff1b1) 形式
+            r'（[a-f0-9]{8}）',             # （b85e0501） 全角括弧形式
+            r'［[a-f0-9]{8}］',             # ［b85e0501］ 全角角括弧形式
+            r'\[[a-f0-9]{8}:\w+\]',         # [1:b2fff1b1] 形式（念のため）
+            r'\[PersonalMemory:[a-f0-9]{8}\]',  # [PersonalMemory:9da2ca91] 形式
+            r'\(PersonalMemory:[a-f0-9]{8}\)',  # (PersonalMemory:9da2ca91) 形式
+            r'（PersonalMemory:[a-f0-9]{8}）',  # （PersonalMemory:9da2ca91） 全角括弧形式
+            r'［PersonalMemory:[a-f0-9]{8}］',  # ［PersonalMemory:9da2ca91］ 全角角括弧形式
+            r'\[OuterMemory:[a-f0-9]{8}\]',     # [OuterMemory:9da2ca91] 形式
+            r'\(OuterMemory:[a-f0-9]{8}\)',     # (OuterMemory:9da2ca91) 形式
+            r'（OuterMemory:[a-f0-9]{8}）',     # （OuterMemory:9da2ca91） 全角括弧形式
+            r'［OuterMemory:[a-f0-9]{8}］',     # ［OuterMemory:9da2ca91］ 全角角括弧形式
         ]
         
         cleaned_text = text
@@ -304,13 +312,15 @@ class WebSocketChatManager:
             remaining_buffer = buffer[boundary_pos:]
         
         if send_content:
-            # リマインダーの設定文字列はわかりやすいように残しておく
+            # 記憶IDタグを除去してユーザーに送信（リマインダータグは残す）
+            clean_content = self._remove_memory_references(send_content)
+            
             # バッファの内容を送信
             ws_message = {
                 "session_id": session_id,
                 "type": "text",
                 "data": {
-                    "content": send_content,
+                    "content": clean_content,
                     "is_incremental": True
                 }
             }
@@ -456,10 +466,9 @@ class WebSocketChatManager:
                     message_type = ws_message.get("type")
                     
                     if message_type == "text":
-                        # textタイプはバッファに蓄積（記憶参照タグを除去）
+                        # textタイプはバッファに蓄積
                         content = ws_message.get("data", {}).get("content", "")
-                        cleaned_content = self._remove_memory_references(content)
-                        session_info["text_buffer"] += cleaned_content
+                        session_info["text_buffer"] += content
                         
                         # バッファ送信判定
                         await self._flush_text_buffer(session_info, websocket, session_id)
