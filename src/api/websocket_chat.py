@@ -100,14 +100,14 @@ class WebSocketChatManager:
             r'（[a-f0-9]{8}）',             # （b85e0501） 全角括弧形式
             r'［[a-f0-9]{8}］',             # ［b85e0501］ 全角角括弧形式
             r'\[[a-f0-9]{8}:\w+\]',         # [1:b2fff1b1] 形式（念のため）
-            r'\[PersonalMemory:[a-f0-9]{8}\]',  # [PersonalMemory:9da2ca91] 形式
-            r'\(PersonalMemory:[a-f0-9]{8}\)',  # (PersonalMemory:9da2ca91) 形式
-            r'（PersonalMemory:[a-f0-9]{8}）',  # （PersonalMemory:9da2ca91） 全角括弧形式
-            r'［PersonalMemory:[a-f0-9]{8}］',  # ［PersonalMemory:9da2ca91］ 全角角括弧形式
-            r'\[OuterMemory:[a-f0-9]{8}\]',     # [OuterMemory:9da2ca91] 形式
-            r'\(OuterMemory:[a-f0-9]{8}\)',     # (OuterMemory:9da2ca91) 形式
-            r'（OuterMemory:[a-f0-9]{8}）',     # （OuterMemory:9da2ca91） 全角括弧形式
-            r'［OuterMemory:[a-f0-9]{8}］',     # ［OuterMemory:9da2ca91］ 全角角括弧形式
+            r'\[PersonalMemory:[^\]]+\]',       # [PersonalMemory:任意の内容] 形式
+            r'\(PersonalMemory:[^\)]+\)',       # (PersonalMemory:任意の内容) 形式
+            r'（PersonalMemory:[^）]+）',        # （PersonalMemory:任意の内容） 全角括弧形式
+            r'［PersonalMemory:[^］]+］',        # ［PersonalMemory:任意の内容］ 全角角括弧形式
+            r'\[OuterMemory:[^\]]+\]',          # [OuterMemory:任意の内容] 形式
+            r'\(OuterMemory:[^\)]+\)',          # (OuterMemory:任意の内容) 形式
+            r'（OuterMemory:[^）]+）',           # （OuterMemory:任意の内容） 全角括弧形式
+            r'［OuterMemory:[^］]+］',           # ［OuterMemory:任意の内容］ 全角角括弧形式
         ]
         
         cleaned_text = text
