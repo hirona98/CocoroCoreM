@@ -104,10 +104,18 @@ class WebSocketChatManager:
             r'\(PersonalMemory:[^\)]+\)',       # (PersonalMemory:任意の内容) 形式
             r'（PersonalMemory:[^）]+）',        # （PersonalMemory:任意の内容） 全角括弧形式
             r'［PersonalMemory:[^］]+］',        # ［PersonalMemory:任意の内容］ 全角角括弧形式
+            r'\[PersonalMemory\]',              # [PersonalMemory] コロンなし形式
+            r'\(PersonalMemory\)',              # (PersonalMemory) コロンなし形式
+            r'（PersonalMemory）',               # （PersonalMemory） 全角コロンなし形式
+            r'［PersonalMemory］',               # ［PersonalMemory］ 全角角括弧コロンなし形式
             r'\[OuterMemory:[^\]]+\]',          # [OuterMemory:任意の内容] 形式
             r'\(OuterMemory:[^\)]+\)',          # (OuterMemory:任意の内容) 形式
             r'（OuterMemory:[^）]+）',           # （OuterMemory:任意の内容） 全角括弧形式
             r'［OuterMemory:[^］]+］',           # ［OuterMemory:任意の内容］ 全角角括弧形式
+            r'\[OuterMemory\]',                 # [OuterMemory] コロンなし形式
+            r'\(OuterMemory\)',                 # (OuterMemory) コロンなし形式
+            r'（OuterMemory）',                  # （OuterMemory） 全角コロンなし形式
+            r'［OuterMemory］',                  # ［OuterMemory］ 全角角括弧コロンなし形式
         ]
         
         cleaned_text = text
@@ -314,6 +322,13 @@ class WebSocketChatManager:
         if send_content:
             # 記憶IDタグを除去してユーザーに送信（リマインダータグは残す）
             clean_content = self._remove_memory_references(send_content)
+            
+            # 除去後に空白のみの場合は送信しない
+            if not clean_content.strip():
+                logger.debug(f"[送信スキップ] 記憶ID除去後に空白のみ: 元テキスト長={len(send_content)}")
+                # バッファを更新（何も送信しない）
+                session_info["text_buffer"] = remaining_buffer
+                return
             
             # バッファの内容を送信
             ws_message = {
