@@ -36,6 +36,7 @@ class CharacterData(BaseModel):
     embeddedApiKey: str = ""
     embeddedModel: str = ""
     embeddedDimension: int = Field(default=3072, description="ベクトル埋め込みの次元数")
+    max_turns_window: int = Field(default=20, description="会話履歴の最大保持数（キャラクター別設定）")
     
     @validator('embeddedDimension', pre=True)
     def validate_embedded_dimension(cls, v):
@@ -100,7 +101,6 @@ class CocoroAIConfig(BaseModel):
 
     # MemOS高度機能設定
     enable_query_rewriting: bool = Field(default=True, description="文脈依存クエリの書き換え機能を有効にする")
-    max_turns_window: int = Field(default=20, description="会話履歴の最大保持数")
     enable_pro_mode: bool = Field(default=True, description="PRO_MODE（Chain of Thought）を有効にする")
     enable_internet_retrieval: bool = Field(default=False, description="インターネット検索機能を有効にする")
     enable_memory_scheduler: bool = Field(default=True, description="メモリスケジューラーを有効にする（常に有効）")
@@ -330,7 +330,7 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig", use_rela
             }
         },
         # MemOS高度機能設定
-        "max_turns_window": cocoro_config.max_turns_window,
+        "max_turns_window": current_character.max_turns_window,
         "enable_textual_memory": True,
         "enable_activation_memory": False,  # API経由LLMでは無効
         "enable_mem_scheduler": cocoro_config.enable_memory_scheduler,

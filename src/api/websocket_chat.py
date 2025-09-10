@@ -250,8 +250,9 @@ class WebSocketChatManager:
             # クリーンな応答を履歴に追加
             chat_history.chat_history.append({"role": "assistant", "content": final_cleaned_response})
             
-            # メモリ効率のため履歴を設定で指定された数に制限
-            max_turns = app.cocoro_product.cocoro_config.max_turns_window
+            # メモリ効率のため履歴をキャラクター設定で指定された数に制限
+            current_char = app.cocoro_product.cocoro_config.current_character
+            max_turns = current_char.max_turns_window if current_char else 20
             if len(chat_history.chat_history) > max_turns:
                 chat_history.chat_history = chat_history.chat_history[-max_turns:]
             
