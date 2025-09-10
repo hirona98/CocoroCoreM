@@ -162,7 +162,7 @@ class CocoroMOSProduct(MOSProduct):
             litellm_config = LiteLLMConfig(
                 model_name=config['model'],
                 api_key=config['api_key'],
-                max_tokens=config.get('max_tokens', 1024),
+                max_tokens=config.get('max_tokens', 8192),
                 extra_config=config.get('extra_config', {})
             )
             
@@ -238,7 +238,7 @@ class CocoroMOSProduct(MOSProduct):
             mem_reader_config = LiteLLMConfig(
                 model_name=config['model'],
                 api_key=config['api_key'],
-                max_tokens=config.get('max_tokens', 2048),  # mem_reader用は記憶要約で長い応答が必要
+                max_tokens=config.get('max_tokens', 8192),
                 extra_config=config.get('extra_config', {})
             )
             
@@ -286,7 +286,7 @@ class CocoroMOSProduct(MOSProduct):
             mem_scheduler_config = LiteLLMConfig(
                 model_name=config['model'],
                 api_key=config['api_key'],
-                max_tokens=config.get('max_tokens', 1024),
+                max_tokens=config.get('max_tokens', 8192),
                 extra_config=config.get('extra_config', {})
             )
             

@@ -21,7 +21,7 @@ class LiteLLMConfig:
         self.model_name_or_path = model_name
         self.api_key = api_key
         
-        self.max_tokens = kwargs.get('max_tokens', 2048)
+        self.max_tokens = kwargs.get('max_tokens', 8192)
         
         self.remove_think_prefix = kwargs.get('remove_think_prefix', False)
         self.extra_config = extra_config or {}
