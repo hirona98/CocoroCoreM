@@ -250,9 +250,10 @@ class WebSocketChatManager:
             # クリーンな応答を履歴に追加
             chat_history.chat_history.append({"role": "assistant", "content": final_cleaned_response})
             
-            # メモリ効率のため履歴を最新20件（10ターン）に制限
-            if len(chat_history.chat_history) > 20:
-                chat_history.chat_history = chat_history.chat_history[-20:]
+            # メモリ効率のため履歴を設定で指定された数に制限
+            max_turns = app.cocoro_product.cocoro_config.max_turns_window
+            if len(chat_history.chat_history) > max_turns:
+                chat_history.chat_history = chat_history.chat_history[-max_turns:]
             
             logger.info(f"即時会話履歴更新完了: session_id={session_id}, 履歴件数={len(chat_history.chat_history)}")
             
