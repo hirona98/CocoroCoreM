@@ -15,7 +15,7 @@ from memos.mem_os.utils.format_utils import clean_json_response
 
 from .cocoro_prompts import (
     COCORO_MEMORY_INSTRUCTION,
-    COCORO_REMINDER_INSTRUCTION,
+    get_cocoro_reminder_instruction,
     COCORO_SUGGESTION_PROMPT_JP,
     # Tree Reorganize Prompts
     REORGANIZE_PROMPT_JP,
@@ -465,12 +465,12 @@ class CocoroMOSProduct(MOSProduct):
             if outer_memory_count > 0:
                 memory_sections += outer_memory_context
             
-            result_prompt = cocoro_prompt + COCORO_MEMORY_INSTRUCTION + COCORO_REMINDER_INSTRUCTION + memory_sections
+            result_prompt = cocoro_prompt + COCORO_MEMORY_INSTRUCTION + get_cocoro_reminder_instruction() + memory_sections
             logger.info(f"システムプロンプト構築完了: CocoroAI + 記憶指示 + リマインダー指示 + メモリ情報 (PersonalMemory: {personal_memory_count}, OuterMemory: {outer_memory_count})")
             return result_prompt
         
         # メモリがない場合はCocoroAIプロンプト + リマインダー指示のみ
-        result_prompt = cocoro_prompt + COCORO_REMINDER_INSTRUCTION
+        result_prompt = cocoro_prompt + get_cocoro_reminder_instruction()
         logger.info("システムプロンプト構築完了: CocoroAIプロンプト + リマインダー指示")
         return result_prompt
     
