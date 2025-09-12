@@ -87,6 +87,11 @@ class CocoroProductWrapper:
                 'embedding_api_key': embedding_api_key
             }
             
+            # localLLMBaseUrlが設定されている場合は追加
+            if current_character.localLLMBaseUrl:
+                litellm_config['base_url'] = current_character.localLLMBaseUrl
+                logger.info(f"🔧 ローカルLLM BaseURL設定: {current_character.localLLMBaseUrl}")
+            
             logger.info(f"🎯 LiteLLM設定: model={litellm_config['model']}")
             logger.info(f"🎯 Embedding設定: model={litellm_config['embedding_model']}")
         
