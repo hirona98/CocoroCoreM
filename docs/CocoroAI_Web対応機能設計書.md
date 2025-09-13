@@ -335,4 +335,63 @@ public class MobileWebSocketHandler
 
 ---
 
+## 12. PWAアプリケーション仕様
+
+### ファイル構成・リポジトリ統合
+
+PWAアプリケーションはCocoroDockリポジトリに統合し、単一リポジトリでの管理を行う。
+
+#### ディレクトリ構造
+```
+CocoroDock/
+├── Communication/              (既存)
+│   ├── MobileWebSocketServer.cs    (新規実装済)
+│   ├── MobileWebSocketModels.cs    (新規実装済)
+│   └── VoicevoxClient.cs           (新規実装済)
+├── Services/                   (既存)
+├── wwwroot/                    (新規追加)
+│   ├── index.html             (~200行) メインHTML
+│   ├── manifest.json          (~30行)  PWAマニフェスト
+│   ├── sw.js                  (~100行) Service Worker
+│   ├── js/
+│   │   ├── app.js            (~300行) メイン処理・UI制御
+│   │   ├── websocket.js      (~150行) WebSocket通信処理
+│   │   ├── audio.js          (~100行) 音声認識・再生処理
+│   │   └── camera.js         (~80行)  カメラ・画像送信処理
+│   ├── css/
+│   │   └── style.css         (~200行) スタイルシート
+│   └── icons/
+│       ├── icon-192.png
+│       └── icon-512.png
+└── ... (既存ファイル)
+```
+
+### コード量見積もり
+- **HTML**: ~200行
+- **JavaScript**: ~630行 (app.js 300 + websocket.js 150 + audio.js 100 + camera.js 80)
+- **CSS**: ~200行  
+- **JSON**: ~30行 (manifest.json)
+- **合計**: **約1,060行**
+
+### 統合のメリット
+1. **単一リポジトリ管理**: ビルド・デプロイが統一
+2. **設定共有**: setting.jsonの設定値をそのまま活用
+3. **静的ファイル配信**: MobileWebSocketServerが wwwroot/ を直接配信
+4. **開発効率**: サーバー・クライアント同時修正が容易
+5. **依存関係明確**: バックエンドAPIとフロントエンドの整合性保証
+
+### 開発工数見積もり
+- **Phase 2 (基本PWA)**: 2-3日
+- **Phase 3 (音声・画像対応)**: 1-2日
+- **Phase 4 (最適化)**: 1日
+- **総開発工数**: 4-6日程度
+
+### 技術的実装方針
+- **静的ファイル配信**: MobileWebSocketServerのHTTPエンドポイントで配信
+- **ビルド統合**: CocoroDockのビルドプロセスにwwwroot/も含める
+- **設定連携**: isEnableWebService設定でWeb機能のON/OFF制御
+- **開発モード**: 開発時はホットリロード対応
+
+---
+
 **End of Document**
