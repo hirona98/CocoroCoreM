@@ -13,7 +13,7 @@ CocoroAIをスマートフォンのWebブラウザからアクセス可能にし
 
 ### 基本方針
 - **CocoroDock中央制御**: すべての通信をCocoroDockが仲介
-- **MemOS完全活用**: セッション管理・記憶機能はMemOSに委任
+- **CocoroCoreM変更なし**: CocoroCoreMは変更しない。CocoroDockがすべての違いを吸収する。
 - **単一デバイス設計**: 複雑な同期機能は実装しない
 - **VOICEVOX必須**: 音声合成はVOICEVOX統合必須
 - **PWA対応**: スマートフォンアプリライクな体験
@@ -40,7 +40,7 @@ CocoroAIをスマートフォンのWebブラウザからアクセス可能にし
 | コンポーネント | 役割 | ポート | 変更内容 |
 |---------------|------|--------|----------|
 | **スマートフォンPWA** | Webクライアント | - | **新規作成** |
-| **CocoroDock** | 中央制御・プロキシ | 55603(新規) | **WebSocket追加** |
+| **CocoroDock** | 中央制御・プロキシ | 55607(新規) | **WebSocket追加** |
 | **CocoreCoreM** | AI処理・MemOS | 55601 | 変更なし |
 | **CocoroShell** | VRM表示 | 55605 | 変更なし |
 | **VOICEVOX** | 音声合成 | 50021 | 変更なし |
@@ -50,16 +50,9 @@ CocoroAIをスマートフォンのWebブラウザからアクセス可能にし
 ## 3. 技術仕様
 
 ### セッション管理方式
-```python
-# MemOSの既存機能をそのまま活用
-current_user_id = app.cocoro_product.current_user_id    # 既存
-cube_id = app.cocoro_product.get_current_cube_id()      # 既存
 
-# 新規設定不要：
-# - 会話履歴: MemOSのTreeTextMemoryが自動管理
-# - コンテキスト: PersonalMemory/OuterMemoryが自動継続  
-# - 記憶検索: MemOSが自動実行
-```
+MemOSの既存機能をそのまま活用
+
 
 ### 通信プロトコル
 - **WebSocket**: リアルタイム双方向通信
@@ -74,7 +67,7 @@ cube_id = app.cocoro_product.get_current_cube_id()      # 既存
 
 #### WebSocketエンドポイント
 ```
-ws://[CocoroDock_IP]:55603/mobile
+ws://[CocoroDock_IP]:55607/mobile
 ```
 - **認証**: なし（内部ネットワーク前提）
 - **プロトコル**: WebSocket over TCP
@@ -96,7 +89,7 @@ ws://[CocoroDock_IP]:55603/mobile
 ### 基本メッセージ構造
 ```json
 {
-  "type": "chat|voice|image|response|error",
+  "type": "chat|response|error",
   "timestamp": "2025-09-12T15:30:00Z",
   "data": { /* タイプ別データ */ }
 }
@@ -110,8 +103,7 @@ ws://[CocoroDock_IP]:55603/mobile
   "type": "chat",
   "timestamp": "2025-09-12T15:30:00Z",
   "data": {
-    "message": "今日の天気を教えて",
-    "input_method": "text|voice"  // 入力方法
+    "message": "今日の天気を教えて"
   }
 }
 ```
@@ -130,15 +122,20 @@ ws://[CocoroDock_IP]:55603/mobile
 }
 ```
 
-#### 画像メッセージ（スマホ→CocoroDock）
+#### 画像付きチャットメッセージ（スマホ→CocoroDock）
 ```json
 {
-  "type": "image",
+  "type": "chat",
   "timestamp": "2025-09-12T15:30:00Z",
   "data": {
-    "image_data": "data:image/jpeg;base64,/9j/4AAQ...",
     "message": "この画像について教えて",
-    "source": "camera|gallery"
+    "chat_type": "text_image",
+    "images": [
+      {
+        "image_data": "data:image/jpeg;base64,/9j/4AAQ...",
+        "source": "camera|gallery"
+      }
+    ]
   }
 }
 ```
