@@ -10,7 +10,7 @@
 ### コンポーネント配置
 ```
 ┌─────────────────┐
-│  スマートフォン  │ (PWA)
+│  スマートフォン  │
 │   Web Browser   │
 └────────┬────────┘
          │ WebSocket (ws://[IP]:55607/mobile)
@@ -40,27 +40,26 @@
 ### 3.1 接続確立シーケンス
 ```mermaid
 sequenceDiagram
-    participant PWA as スマートフォンPWA
+    participant ブラウザ as スマートフォン
     participant Dock as CocoroDock
     participant Core as CocoroCoreM
     
-    PWA->>Dock: WebSocket接続要求<br/>ws://[IP]:55607/mobile
+    ブラウザ->>Dock: WebSocket接続要求<br/>ws://[IP]:55607/mobile
     Dock->>Dock: モバイルクライアントセッション作成<br/>session_id = mobile_{timestamp}
     Note over Dock,Core: 既存WebSocketChatClient使用: dock_{timestamp}<br/>変更なし
     Core-->>Dock: 接続確立
-    Dock-->>PWA: 接続確立
-    PWA->>PWA: Service Worker登録
+    Dock-->>ブラウザ: 接続確立
 ```
 
 ### 3.2 テキストチャット処理シーケンス
 ```mermaid
 sequenceDiagram
-    participant PWA as スマートフォンPWA
+    participant ブラウザ as スマートフォン
     participant Dock as CocoroDock
     participant Core as CocoroCoreM
     participant VV as VOICEVOX
     
-    PWA->>Dock: メッセージ送信<br/>{"type":"chat", "data":{"message":"...", "input_method":"text"}}
+    ブラウザ->>Dock: メッセージ送信<br/>{"type":"chat", "data":{"message":"...", "input_method":"text"}}
     
     Dock->>Dock: メッセージ解析・WebSocketChatRequest変換
     Note over Dock,Core: 既存のWebSocketChatClient.SendChatAsync()使用<br/>変更なし
@@ -69,7 +68,7 @@ sequenceDiagram
     
     loop ストリーミング配信
         Core-->>Dock: テキストチャンク<br/>{"type":"text", "data":{"content":"...", "is_incremental":true}}
-        Dock-->>PWA: 部分テキスト配信
+        Dock-->>ブラウザ: 部分テキスト配信
     end
     
     Core-->>Dock: 応答完了<br/>{"type":"end", "data":{"final_text":"...", "total_tokens":123}}
@@ -79,25 +78,25 @@ sequenceDiagram
     
     Dock->>Dock: 音声ファイル保存<br/>/audio/response_{timestamp}.wav
     
-    Dock-->>PWA: 最終応答<br/>{"type":"response", "data":{"text":"...", "audio_url":"/audio/..."}}
+    Dock-->>ブラウザ: 最終応答<br/>{"type":"response", "data":{"text":"...", "audio_url":"/audio/..."}}
     
-    PWA->>PWA: テキスト表示・音声再生
+    ブラウザ->>ブラウザ: テキスト表示・音声再生
 ```
 
 ### 3.3 音声入力処理シーケンス
 
 ```mermaid
 sequenceDiagram
-    participant PWA as スマートフォンPWA
+    participant ブラウザ as スマートフォン
     participant API as Web Speech API
     participant Dock as CocoroDock
     participant Core as CocoroCoreM
     
-    PWA->>API: 音声認識開始
+    ブラウザ->>API: 音声認識開始
     API->>API: 音声→テキスト変換
-    API-->>PWA: 認識結果テキスト
+    API-->>ブラウザ: 認識結果テキスト
     
-    PWA->>Dock: メッセージ送信<br/>{"type":"chat", "data":{"message":"..."}}
+    ブラウザ->>Dock: メッセージ送信<br/>{"type":"chat", "data":{"message":"..."}}
     
     Note over Dock,Core: 以降はテキストチャット処理と同じ
 ```
@@ -105,15 +104,15 @@ sequenceDiagram
 ### 3.4 画像付きチャット処理シーケンス
 ```mermaid
 sequenceDiagram
-    participant PWA as スマートフォンPWA
+    participant ブラウザ as スマートフォン
     participant Dock as CocoroDock
     participant Core as CocoroCoreM
     participant MemOS as MemOS
     
-    PWA->>PWA: カメラ撮影/画像選択
-    PWA->>PWA: Base64エンコード
+    ブラウザ->>ブラウザ: カメラ撮影/画像選択
+    ブラウザ->>ブラウザ: Base64エンコード
     
-    PWA->>Dock: 画像付きチャット送信<br/>{"type":"chat", "data":{"message":"...", "chat_type":"text_image", "images":[...]}}
+    ブラウザ->>Dock: 画像付きチャット送信<br/>{"type":"chat", "data":{"message":"...", "chat_type":"text_image", "images":[...]}}
     
     Dock->>Dock: 画像データ検証<br/>サイズ制限確認
     
@@ -212,7 +211,7 @@ sequenceDiagram
 
 | レベル | ID形式 | 説明 |
 |--------|--------|------|
-| PWA-Dock | mobile_{timestamp} | モバイル接続識別 |
+| ブラウザ-Dock | mobile_{timestamp} | モバイル接続識別 |
 | Dock-Core | dock_{timestamp} | 既存WebSocketChatClient利用 |
 | MemOS | user_user_{memoryId}_cube | 既存キューブ識別機能 |
 
@@ -232,15 +231,15 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant PWA as スマートフォンPWA
+    participant ブラウザ as スマートフォン
     participant Dock as CocoroDock
     participant Core as CocoroCoreM
     
-    PWA->>Dock: WebSocket接続要求
+    ブラウザ->>Dock: WebSocket接続要求
     Dock->>Core: WebSocket接続要求
     Core--xDock: 接続失敗
-    Dock-->>PWA: エラー応答<br/>{"type":"error", "data":{"code":"CORE_M_ERROR"}}
-    PWA->>PWA: 再接続試行<br/>(exponential backoff)
+    Dock-->>ブラウザ: エラー応答<br/>{"type":"error", "data":{"code":"CORE_M_ERROR"}}
+    ブラウザ->>ブラウザ: 再接続試行<br/>(exponential backoff)
 ```
 
 ### 6.2 VOICEVOX エラー
@@ -249,12 +248,12 @@ sequenceDiagram
 sequenceDiagram
     participant Dock as CocoroDock
     participant VV as VOICEVOX
-    participant PWA as スマートフォンPWA
+    participant ブラウザ as スマートフォン
     
     Dock->>VV: synthesis API
     VV--xDock: エラー応答
     Note over Dock: 音声合成エラー時は<br/>音声URLなしで送信
-    Dock-->>PWA: テキストのみ応答<br/>{"type":"response", "data":{"text":"...", "audio_url":null}}
+    Dock-->>ブラウザ: テキストのみ応答<br/>{"type":"response", "data":{"text":"...", "audio_url":null}}
 ```
 
 ## 7. 実装制約事項と前提条件

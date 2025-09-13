@@ -76,9 +76,7 @@ ws://[CocoroDock_IP]:55607/mobile
 #### HTTPエンドポイント
 | Method | Path | 説明 | Content-Type |
 |--------|------|------|--------------|
-| GET | `/` | PWA メインページ | text/html |
-| GET | `/manifest.json` | PWA マニフェスト | application/json |
-| GET | `/sw.js` | Service Worker | application/javascript |
+| GET | `/` |     メインページ | text/html |
 | GET | `/assets/*` | 静的アセット | auto-detect |
 | GET | `/audio/{filename}` | VOICEVOX音声ファイル | audio/wav |
 
@@ -200,53 +198,6 @@ private async Task<string> SynthesizeVoiceAsync(string text, int speakerId = 3)
 
 setting.jsonの値を使用する
 
-
----
-
-## 7. PWA仕様
-
-### 必須機能
-- **Web Speech API**: 音声認識（Android Chrome対応）
-- **MediaDevices API**: カメラアクセス
-- **WebSocket**: リアルタイム通信
-- **Audio API**: 音声再生
-- **Web App Manifest**: ホーム画面追加
-- **Service Worker**: 基本的なキャッシング
-
-### manifest.json
-```json
-{
-  "name": "CocoroAI Mobile",
-  "short_name": "CocoroAI", 
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#4873CF", 
-  "icons": [
-    {
-      "src": "/icons/icon-192.png",
-      "sizes": "192x192", 
-      "type": "image/png"
-    },
-    {
-      "src": "/icons/icon-512.png", 
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
-}
-```
-
-### ブラウザ対応
-| ブラウザ | 音声認識 | 音声合成 | カメラ | WebSocket |
-|---------|---------|---------|-------|-----------|
-| **Android Chrome** | ✅ | ✅ | ✅ | ✅ |
-| **iOS Safari** | ❌ | ✅ | ✅ | ✅ |
-| **Android Firefox** | ❌ | ✅ | ✅ | ✅ |
-
-### フォールバック対応
-- **iOS Safari**: 音声認識未対応 → テキスト入力のみ
-- **音声認識エラー**: 自動でテキスト入力モードに切り替え
 
 ---
 
