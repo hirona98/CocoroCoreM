@@ -58,26 +58,15 @@ GET /api/health
 
 ---
 
-### MCPツール登録ログ取得
+### MCPツール登録ログ取得（未実装）
 
 #### `GET /api/mcp/tool-registration-log`
 
-MCPツールの登録ログを取得します（現在未実装）。
+MCPツールの登録ログを取得します。
 
-**リクエスト**
-```
-GET /api/mcp/tool-registration-log
-```
+**ステータス**: 未実装
 
-**レスポンス**
-```json
-{
-  "status": "success",
-  "message": "MCPは現在実装されていません",
-  "logs": [],
-  "timestamp": "2025-01-01T12:00:00Z"
-}
-```
+**備考**: 将来的にMCP（Model Context Protocol）統合時に実装予定
 
 ---
 

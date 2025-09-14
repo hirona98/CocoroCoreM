@@ -18,7 +18,7 @@ CocoroCoreMにおける統合チャット機能のAPI仕様を定義します。
 ### メインチャットAPI（WebSocket）
 
 ```
-WebSocket /ws/chat/{client_id}
+WebSocket /chat/{client_id}
 ```
 
 #### 接続仕様
@@ -39,13 +39,14 @@ interface ChatRequest {
   query: string;                                                         // ユーザークエリ（必須）
   
   // 機能識別
-  chat_type: "text" | "text_image" | "notification" | "desktop_watch";  // チャットタイプ（必須）
+  chat_type: "text" | "text_image" | "notification" | "desktop_watch" | "reminder";  // チャットタイプ（必須）
   
   // 画像関連
   images?: ImageData[];                                                  // 画像データ配列（画像機能時）
   
   // 機能別コンテキスト
   notification?: NotificationData;                                       // 通知データ（通知機能時）
+  reminder?: ReminderData;                                              // リマインダーデータ（リマインダー機能時）
   desktop_context?: DesktopContext;                                     // デスクトップコンテキスト（監視機能時）
   
   // オプション
@@ -61,8 +62,13 @@ interface ImageData {
 }
 
 interface NotificationData {
-  original_source: string;                    // 通知送信元（必須）
+  original_source: string;          // 通知送信元（必須）※JSONでは"from"でも可
   original_message: string;         // 元の通知メッセージ（必須）
+}
+
+interface ReminderData {
+  requirement: string;              // リマインダー要件（必須）
+  triggered_at: string;             // トリガー時刻（ISO形式、必須）
 }
 
 interface DesktopContext {
@@ -265,12 +271,38 @@ interface ErrorMessage {
 3. **独り言生成**: キャラクター性を活かした独り言形式の応答
 4. **応答配信**: WebSocketストリーミング配信
 
+### 5. リマインダー機能
+
+**特徴**: 時間指定リマインダーの通知、独り言形式の応答
+
+```typescript
+// WebSocketメッセージ例
+{
+  "action": "chat",
+  "session_id": "dock_20240120123456789",
+  "request": {
+    "query": "会議の時間です",
+    "chat_type": "reminder",
+    "reminder": {
+      "requirement": "14時から会議",
+      "triggered_at": "2024-01-20T14:00:00.000Z"
+    }
+  }
+}
+```
+
+**処理フロー**:
+1. **コンテキスト統合**: リマインダー情報を自動的にクエリに統合
+2. **MOSProduct処理**: 統合されたクエリでCocoroMOSProduct.chat_with_references()処理
+3. **応答生成**: キャラクター性を活かしたリマインダー通知
+4. **応答配信**: WebSocketストリーミング配信
+
 
 ## 技術実装詳細
 
 ### WebSocket接続
 
-- **エンドポイント**: `ws://localhost:{port}/ws/chat/{client_id}`
+- **エンドポイント**: `ws://localhost:{port}/chat/{client_id}`
 - **client_id**: 一意なクライアント識別子（例: `dock_20240120123456789`）
 - **接続ライフサイクル**: 接続後、複数セッションの並行処理が可能
 
