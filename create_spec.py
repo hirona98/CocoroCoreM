@@ -136,16 +136,6 @@ def create_spec_file():
     else:
         print("⚠️ litellm not found (required for LLM integration)")
     
-    # Neo4jディレクトリ（プロジェクト内）
-    if Path("neo4j").exists():
-        data_entries.append("('neo4j', 'neo4j')")
-        print("✅ neo4j directory found")
-    
-    # JREディレクトリ（プロジェクト内）
-    if Path("jre").exists():
-        data_entries.append("('jre', 'jre')")
-        print("✅ jre directory found")
-    
     # srcディレクトリ全体をバンドル（重要）
     if Path("src").exists():
         data_entries.append("('src', 'src')")
