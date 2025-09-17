@@ -139,7 +139,7 @@ class WebSocketChatManager:
         import re
         from datetime import datetime
         
-        # パターン: [REMINDER:2024-09-07T15:00:00|会議の時間]
+        # パターン: [REMINDER:2024-09-07 15:00:00|会議の時間]
         reminder_pattern = r'\[REMINDER:([^\|\]]+)(?:\|([^\]]+))?\]'
         matches = re.findall(reminder_pattern, text)
         
@@ -148,7 +148,7 @@ class WebSocketChatManager:
             datetime_str = match[0].strip()
             message = match[1].strip() if len(match) > 1 and match[1] else ""
             
-            # ISO形式の日時検証
+            # 日時形式の検証
             try:
                 parsed_datetime = datetime.fromisoformat(datetime_str)
                 
@@ -652,11 +652,11 @@ class WebSocketChatManager:
             f"リマインダー要件: {reminder_requirement}\n\n"
             "以下の形式で、あなたの**キャラクター性を活かして**ユーザーに知らせてください：\n"
             "- 時間になったことを伝える\n"
-            "- 必要に応じて励ましや応援を加える\n"
+            "- コメントを加える\n"
             "- 2～3文で完結させる\n\n"
             "例：\n"
             " 会議の時間だよ！準備はできた？\n"
-            " お薬を飲む時間になりました。忘れずにね。\n"
+            " お薬を飲む時間になりました。忘れずに飲んでくださいね。\n"
             " 休憩時間だよ〜。少し休んでリフレッシュしよう！\n"
             " ランチタイムです。美味しいものを食べて来てくださいね。"
         )

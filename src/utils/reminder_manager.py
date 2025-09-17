@@ -73,7 +73,7 @@ class ReminderManager:
         リマインダー追加
         
         Args:
-            datetime_str: ISO形式の日時文字列（YYYY-MM-DDTHH:MM:SS）
+            datetime_str: 日時文字列（YYYY-MM-DD HH:MM:SS）
             requirement: リマインダー要件
             
         Returns:
@@ -121,7 +121,7 @@ class ReminderManager:
         
         Args:
             reminder_id: リマインダーID
-            datetime_str: ISO形式の日時文字列
+            datetime_str: 日時文字列
             requirement: リマインダー要件
         """
         try:
