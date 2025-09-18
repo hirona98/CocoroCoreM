@@ -290,8 +290,32 @@ class CocoroMOSProduct(MOSProduct):
                 extra_config=config.get('extra_config', {})
             )
             
-            # LiteLLMWrapperインスタンスを作成（使い回し用）
+            # LiteLLMWrapperインスタンスを作成
             litellm_wrapper = LiteLLMWrapper(mem_scheduler_config)
+
+            # 追加: メモリスケジューラーはJSON配列のみを期待するため、
+            # 余計なテキストが付与された場合でも先頭のJSON配列だけを返す薄いラッパーを適用
+            class _JSONArrayFirstLineWrapper:
+                """JSON配列のみを返すための薄いアダプタ（mem_scheduler専用）"""
+                def __init__(self, base_llm):
+                    self._base = base_llm
+
+                def generate(self, messages, **kwargs):
+                    text = self._base.generate(messages, **kwargs)
+                    # 先頭の非空行がJSON配列ならそれだけ返す
+                    for line in str(text).splitlines():
+                        s = line.strip()
+                        if s.startswith('['):
+                            # 最頻ケース: 1行配列。終端 ']' がなくてもまずこの行を返す。
+                            # memos 側はjson.loadsをかけるため、最小限の配列を優先。
+                            return s
+                    return text
+
+                # その他の属性/メソッドは委譲（例えば generate_stream 等）
+                def __getattr__(self, name):
+                    return getattr(self._base, name)
+
+            litellm_wrapper = _JSONArrayFirstLineWrapper(litellm_wrapper)
             
             # mem_scheduler内の全LLMインスタンスを再帰的に置き換え
             if hasattr(self, '_mem_scheduler') and self._mem_scheduler is not None:
