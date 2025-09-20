@@ -9,7 +9,7 @@ CocoroCoreMは、MemOS統合による高度な記憶機能とリアルタイム�
 
 ### ヘルスチェック
 
-#### `GET /health`
+#### `GET /api/health`
 
 システムの稼働状態を確認します。
 
@@ -57,20 +57,6 @@ GET /api/health
 - `shutdown`: システム終了
 
 ---
-
-### MCPツール登録ログ取得（未実装）
-
-#### `GET /api/mcp/tool-registration-log`
-
-MCPツールの登録ログを取得します。
-
-**ステータス**: 未実装
-
-**備考**: 将来的にMCP（Model Context Protocol）統合時に実装予定
-
----
-
-
 
 ### キャラクター記憶管理
 
