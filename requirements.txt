@@ -1,7 +1,7 @@
 # CocoroCoreM Dependencies
 
 # MemOS
-MemoryOS[tree-mem,mem-reader]==1.0.0
+MemoryOS[tree-mem,mem-reader]>=1.0.0
 
 # Web Framework
 fastapi>=0.104.0
