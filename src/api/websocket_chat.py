@@ -467,7 +467,7 @@ class WebSocketChatManager:
             while session_info["active"]:
                 try:
                     # キューから取得（タイムアウト付き）
-                    sse_chunk = await asyncio.wait_for(session_queue.get(), timeout=0.1)
+                    sse_chunk = await asyncio.wait_for(session_queue.get(), timeout=0.5)
                     
                     if sse_chunk is None:  # 終了シグナル
                         logger.info(f"終了シグナル受信: session_id={session_id}")
