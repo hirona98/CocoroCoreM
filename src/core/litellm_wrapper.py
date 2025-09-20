@@ -16,10 +16,12 @@ logger = logging.getLogger(__name__)
 class LiteLLMConfig:
     """LiteLLM設定クラス"""
     
-    def __init__(self, model_name: str, api_key: str, 
+    def __init__(self, model_name: str, api_key: str, base_url: str | None = None,
                  extra_config: Dict[str, Any] = None, **kwargs):
         self.model_name_or_path = model_name
         self.api_key = api_key
+        # OpenAI互換エンドポイント用の明示的なbase_url
+        self.base_url = base_url
         
         self.max_tokens = kwargs.get('max_tokens', 8192)
         
@@ -126,31 +128,46 @@ class LiteLLMWrapper:
         except ImportError:
             raise RuntimeError("LiteLLMがインストールされていません。pip install litellm でインストールしてください。")
         
+        # base_url が指定されている場合は OpenAI互換運用として明示
+        base_url_effective = getattr(self.config, 'base_url', None) or self.config.extra_config.get('base_url')
+        if base_url_effective:
+            logger.info(f"OpenAI互換運用: base_url={base_url_effective}")
+
         logger.info(f"LiteLLMWrapper初期化完了: model={self.config.model_name_or_path}")
     
     def _setup_environment_variables(self):
         """プロバイダー別環境変数設定"""
-        if self.config.api_key:
-            if self.config.provider == "openai":
-                os.environ["OPENAI_API_KEY"] = self.config.api_key
-                logger.info(f"   → OPENAI_API_KEY に設定")
-            elif self.config.provider == "anthropic":
-                os.environ["ANTHROPIC_API_KEY"] = self.config.api_key
-                logger.info(f"   → ANTHROPIC_API_KEY に設定")
-            elif self.config.provider == "xai":
-                os.environ["XAI_API_KEY"] = self.config.api_key
-                logger.info(f"   → XAI_API_KEY に設定")
-            elif self.config.provider == "gemini":
-                os.environ["GEMINI_API_KEY"] = self.config.api_key
-                logger.info(f"   → GEMINI_API_KEY に設定")
-            elif self.config.provider == "vertex_ai":
-                # Vertex AIの場合は追加設定が必要
-                if "project_id" in self.config.extra_config:
-                    os.environ["VERTEXAI_PROJECT"] = self.config.extra_config["project_id"]
-                if "location" in self.config.extra_config:
-                    os.environ["VERTEXAI_LOCATION"] = self.config.extra_config["location"]
-                logger.info(f"   → VERTEX_AI 環境変数に設定")
-            # 他のプロバイダーも同様に追加可能
+        provider = self.config.provider
+        api_key = self.config.api_key or ""
+        extra = self.config.extra_config or {}
+        base_url = getattr(self.config, 'base_url', None) or extra.get('base_url')
+
+        # プロバイダー別APIキー環境変数のマッピング
+        provider_key_env = {
+            "openai": "OPENAI_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "xai": "XAI_API_KEY",
+            "gemini": "GEMINI_API_KEY",
+        }
+
+        # 共通: APIキーの設定（存在する場合のみ）
+        if provider in provider_key_env and api_key:
+            env_name = provider_key_env[provider]
+            os.environ[env_name] = api_key
+            logger.info(f"   → {env_name} に設定")
+
+        # Vertex AI は追加の環境変数を使用
+        if provider == "vertex_ai":
+            if "project_id" in extra:
+                os.environ["VERTEXAI_PROJECT"] = extra["project_id"]
+            if "location" in extra:
+                os.environ["VERTEXAI_LOCATION"] = extra["location"]
+            logger.info(f"   → VERTEX_AI 環境変数に設定")
+
+        # LM Studio は per-call の base_url/api_base 指定で対応。環境変数は汚染しない。
+        if provider == "lm_studio":
+            effective_base_url = base_url or "http://localhost:1234/v1"
+            logger.info(f"   → LM_STUDIO: 環境変数は変更せず per-call 指定 (base_url={effective_base_url})")
     
     def _prepare_completion_params(self, **kwargs) -> Dict[str, Any]:
         """
@@ -171,6 +188,25 @@ class LiteLLMWrapper:
             params['drop_params'] = True
             logger.debug("空のreasoning_effortを検出 → パラメータ削除とdrop_params有効化")
         
+        # OpenAI互換系の安定動作用に、per-call でも base_url / api_base を注入（環境変数依存回避）
+        resolved_base_url = getattr(self.config, 'base_url', None) or self.config.extra_config.get('base_url')
+        # LM Studio では base_url が必須。未指定ならデフォルトを補完。
+        if not resolved_base_url and self.config.provider == "lm_studio":
+            resolved_base_url = "http://localhost:1234/v1"
+        if resolved_base_url:
+            # LiteLLM の版差に備えて両方渡す
+            params.setdefault('base_url', resolved_base_url)
+            params.setdefault('api_base', resolved_base_url)
+
+        # LM Studio は OpenAI 互換 API を使うが、Authorization ヘッダーは空だと httpcore エラーになる。
+        # 環境変数は汚染しない方針なので、per-call で非空の api_key を必ず渡す。
+        if self.config.provider == "lm_studio":
+            effective_key = self.config.api_key if self.config.api_key else None
+            if not effective_key:
+                # LM Studio は任意のトークンで通るため、ダミー値を使用
+                params.setdefault('api_key', 'lm-studio')
+            else:
+                params.setdefault('api_key', effective_key)
         return params
     
     def generate(self, messages: List[Dict[str, str]], **kwargs) -> str:
@@ -319,11 +355,25 @@ class LiteLLMWrapper:
             List[List[float]]: 埋め込みベクトルのリスト
         """
         try:
+            # パラメータ準備（per-call で base_url / api_base / api_key を注入）
+            params: Dict[str, Any] = {**self.config.extra_config}
+            resolved_base_url = getattr(self.config, 'base_url', None) or self.config.extra_config.get('base_url')
+            if not resolved_base_url and self.config.provider == "lm_studio":
+                # LM Studio かつ未設定の場合はデフォルトで補完
+                resolved_base_url = "http://localhost:1234/v1"
+            if resolved_base_url:
+                params.setdefault('base_url', resolved_base_url)
+                params.setdefault('api_base', resolved_base_url)
+
+            if self.config.provider == "lm_studio":
+                effective_key = self.config.api_key if self.config.api_key else None
+                params.setdefault('api_key', effective_key or 'lm-studio')
+
             # LiteLLM embedding呼び出し
             response = self.litellm.embedding(
                 model=self.config.model_name_or_path,
                 input=texts,
-                **self.config.extra_config  # プロバイダー固有設定
+                **params  # プロバイダー固有設定 + per-call 注入
             )
             
             # 埋め込みベクトルを抽出（LiteLLMのレスポンス形式に対応）

@@ -159,11 +159,17 @@ class CocoroMOSProduct(MOSProduct):
                 raise ValueError("❌ LiteLLM設定にmodelが設定されていません")
             self._ensure_api_key(config, 'api_key', '')
                 
+            # base_url を extra_config にも反映しておく（拾い漏れ防止）
+            extra_cfg = config.get('extra_config', {}) or {}
+            if 'base_url' in config and config['base_url']:
+                extra_cfg.setdefault('base_url', config['base_url'])
+
             litellm_config = LiteLLMConfig(
                 model_name=config['model'],
                 api_key=config['api_key'],
+                base_url=config.get('base_url'),
                 max_tokens=config.get('max_tokens', 8192),
-                extra_config=config.get('extra_config', {})
+                extra_config=extra_cfg
             )
             
             # chat_llmをLiteLLMWrapperに置き換え
