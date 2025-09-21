@@ -30,6 +30,7 @@ class CharacterData(BaseModel):
     visionModel: str = ""  # 画像分析用モデル
     visionApiKey: str = ""  # 画像分析用APIキー（空ならapiKeyを使用）
     localLLMBaseUrl: str = ""
+    embeddedBaseUrl: str = ""  # 埋め込みモデル専用ベースURL（デフォルトを使用）
     systemPromptFilePath: str = ""
     isEnableMemory: bool = False
     memoryId: str = ""
@@ -57,6 +58,10 @@ class CharacterData(BaseModel):
     def get_embedded_api_key(self) -> str:
         """埋め込みAPIキーを取得（空の場合はダミー値を返す）"""
         return self.embeddedApiKey or self.get_api_key()
+
+    def get_embedded_base_url(self) -> str:
+        """埋め込みモデル用ベースURLを取得（埋め込みモデル専用設定のみ使用、LLM設定からは独立）"""
+        return self.embeddedBaseUrl
     
 
 

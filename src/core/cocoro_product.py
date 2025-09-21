@@ -84,7 +84,8 @@ class CocoroProductWrapper:
                 'extra_config': {},
                 # 埋め込み設定を追加（既存フィールド使用、設定必須）
                 'embedding_model': current_character.embeddedModel,
-                'embedding_api_key': embedding_api_key
+                'embedding_api_key': embedding_api_key,
+                'embedding_base_url': current_character.get_embedded_base_url()  # 埋め込み専用ベースURL
             }
             
             # localLLMBaseUrlが設定されている場合は追加
@@ -94,6 +95,7 @@ class CocoroProductWrapper:
             
             logger.info(f"🎯 LiteLLM設定: model={litellm_config['model']}")
             logger.info(f"🎯 Embedding設定: model={litellm_config['embedding_model']}")
+            logger.info(f"🎯 EmbeddingベースURL: {litellm_config['embedding_base_url'] or '未設定'}")
             logger.info(f"🎯 max_tokens設定: {litellm_config['max_tokens']}")
         
         # CocoroMOSProduct初期化（CocoroAI専用システムプロンプト対応 + LiteLLM統合）

@@ -199,16 +199,21 @@ class CocoroMOSProduct(MOSProduct):
                 raise ValueError("❌ LiteLLM設定にembedding_modelが設定されていません")
             self._ensure_api_key(config, 'embedding_api_key', '埋め込み')
                 
-            # base_url を伝播（chat LLM と同一の接続先を使用）
-            base_url = config.get('base_url') or (config.get('extra_config') or {}).get('base_url')
+            # 埋め込み専用ベースURL設定（LLM設定とは独立）
+            base_url = config.get('embedding_base_url')
+
             # LM Studio の場合は未指定でもデフォルトを補完
-            try:
-                provider_prefix = str(config.get('embedding_model', '')).split('/')[0].lower()
-            except Exception:
-                provider_prefix = 'openai'
-            if not base_url and provider_prefix in ['lm_studio', 'lmstudio']:
-                base_url = 'http://localhost:1234/v1'
-                logger.info(f"🔧 LM Studio用ベースURL自動設定: {base_url}")
+            if not base_url:
+                try:
+                    provider_prefix = str(config.get('embedding_model', '')).split('/')[0].lower()
+                except Exception:
+                    provider_prefix = 'openai'
+                if provider_prefix in ['lm_studio', 'lmstudio']:
+                    base_url = 'http://localhost:1234/v1'
+                    logger.info(f"🔧 LM Studio用ベースURL自動設定: {base_url}")
+                elif provider_prefix == 'openai' and not base_url:
+                    # OpenAIの場合は明示的にデフォルトURLを設定しない（LiteLLMがハンドリング）
+                    logger.info(f"🔧 OpenAI埋め込み: デフォルトエンドポイントを使用")
 
             embedder_config = {
                 "model_name_or_path": config['embedding_model'],
