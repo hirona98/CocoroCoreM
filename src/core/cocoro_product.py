@@ -94,6 +94,7 @@ class CocoroProductWrapper:
             
             logger.info(f"🎯 LiteLLM設定: model={litellm_config['model']}")
             logger.info(f"🎯 Embedding設定: model={litellm_config['embedding_model']}")
+            logger.info(f"🎯 max_tokens設定: {litellm_config['max_tokens']}")
         
         # CocoroMOSProduct初期化（CocoroAI専用システムプロンプト対応 + LiteLLM統合）
         self.mos_product = CocoroMOSProduct(

@@ -90,6 +90,22 @@ async def generate_image_description(image_data_list: List[Dict[str, str]], coco
         user_content.append({"type": "text", "text": user_text})
         
         # LiteLLM Vision APIで画像の説明を生成
+        # base_url と api_key（per-call）を注入して OpenAI 互換のローカル/クラウドを切り替え
+        base_url = None
+        if hasattr(current_character, 'localLLMBaseUrl') and current_character.localLLMBaseUrl:
+            base_url = current_character.localLLMBaseUrl
+        # プロバイダーが lm_studio の場合はデフォルト補完
+        provider_prefix = model.split('/')[0] if '/' in model else 'openai'
+        if not base_url and provider_prefix == 'lm_studio':
+            base_url = 'http://localhost:1234/v1'
+
+        per_call_params: Dict[str, Any] = {}
+        if base_url:
+            per_call_params['base_url'] = base_url
+            per_call_params['api_base'] = base_url
+        # Vision用APIキー（空の場合はダミー値をセットして httpcore エラーを回避）
+        per_call_params['api_key'] = api_key or 'dummy-api-key'
+
         response = await litellm.acompletion(
             model=model,
             messages=[
@@ -97,7 +113,8 @@ async def generate_image_description(image_data_list: List[Dict[str, str]], coco
                 {"role": "user", "content": user_content},
             ],
             temperature=0.3,
-            max_tokens=1000
+            max_tokens=1000,
+            **per_call_params
         )
         
         full_response = response.choices[0].message.content

@@ -174,8 +174,9 @@ class CocoroMOSProduct(MOSProduct):
             
             # chat_llmをLiteLLMWrapperに置き換え
             self.chat_llm = LiteLLMWrapper(litellm_config)
-            
+
             logger.info(f"✅ LiteLLM統合完了: {litellm_config.model_name_or_path}")
+            logger.info(f"🔧 max_tokens設定: {config.get('max_tokens', 8192)}")
             
         except Exception as e:
             # 詳細エラー出力
@@ -198,11 +199,25 @@ class CocoroMOSProduct(MOSProduct):
                 raise ValueError("❌ LiteLLM設定にembedding_modelが設定されていません")
             self._ensure_api_key(config, 'embedding_api_key', '埋め込み')
                 
+            # base_url を伝播（chat LLM と同一の接続先を使用）
+            base_url = config.get('base_url') or (config.get('extra_config') or {}).get('base_url')
+            # LM Studio の場合は未指定でもデフォルトを補完
+            try:
+                provider_prefix = str(config.get('embedding_model', '')).split('/')[0].lower()
+            except Exception:
+                provider_prefix = 'openai'
+            if not base_url and provider_prefix in ['lm_studio', 'lmstudio']:
+                base_url = 'http://localhost:1234/v1'
+                logger.info(f"🔧 LM Studio用ベースURL自動設定: {base_url}")
+
             embedder_config = {
                 "model_name_or_path": config['embedding_model'],
                 "api_key": config['embedding_api_key'],
-                "extra_config": {}
+                "extra_config": ({"base_url": base_url} if base_url else {})
             }
+
+            # ベースURL設定状況をログ出力
+            logger.info(f"🔧 Embedder ベースURL設定: {base_url or 'デフォルト'} (モデル: {config['embedding_model']})")
             
             # LiteLLMEmbedder作成して保存（MemCube作成後に使用するため）
             self._litellm_embedder = LiteLLMEmbedder(embedder_config)
