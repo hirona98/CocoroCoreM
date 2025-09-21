@@ -36,7 +36,8 @@ class CharacterData(BaseModel):
     embeddedApiKey: str = ""
     embeddedModel: str = ""
     embeddedDimension: int = Field(default=3072, description="ベクトル埋め込みの次元数")
-    max_turns_window: int = Field(default=20, description="会話履歴の最大保持数（キャラクター別設定）")
+    max_turns_window: int = Field(default=100, description="会話履歴の最大保持数（キャラクター別設定）")
+    max_tokens: int = Field(default=8192, description="LLMの最大トークン数")
     
     @validator('embeddedDimension', pre=True)
     def validate_embedded_dimension(cls, v):

@@ -252,7 +252,7 @@ class WebSocketChatManager:
             
             # メモリ効率のため履歴をキャラクター設定で指定された数に制限
             current_char = app.cocoro_product.cocoro_config.current_character
-            max_turns = current_char.max_turns_window if current_char else 20
+            max_turns = current_char.max_turns_window if current_char else 100
             if len(chat_history.chat_history) > max_turns:
                 chat_history.chat_history = chat_history.chat_history[-max_turns:]
             
