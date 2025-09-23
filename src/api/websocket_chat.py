@@ -181,9 +181,10 @@ class WebSocketChatManager:
         chunk_count = 0
         current_user_id = app.cocoro_product.current_user_id
         cube_id = app.cocoro_product.get_current_cube_id()
-        
+        history_updated = False  # 重複更新防止フラグ
+
         logger.info(f"MOSProduct処理開始: session_id={session_id}, cube_id={cube_id}")
-        
+
         for sse_chunk in app.cocoro_product.mos_product.chat_with_references(
             query=enhanced_query,
             user_id=current_user_id,
@@ -191,7 +192,7 @@ class WebSocketChatManager:
             internet_search=request_data.get("internet_search", False)
         ):
             chunk_count += 1
-            
+
             # アシスタントの回答を収集（会話履歴更新のため）
             if '"type": "text"' in sse_chunk:
                 try:
@@ -201,10 +202,10 @@ class WebSocketChatManager:
                         full_response += json_data.get("data", "")
                 except:
                     pass  # JSON解析エラーは無視
-            
+
             # デバッグ出力
             self._log_chunk_debug(sse_chunk, chunk_count)
-            
+
             # キューに結果を追加（完全非同期）
             try:
                 asyncio.run_coroutine_threadsafe(
@@ -214,13 +215,21 @@ class WebSocketChatManager:
             except Exception as queue_error:
                 logger.error(f"キュー送信エラー: {queue_error}")
                 break
-            
+
             # ストリーミング終了シグナル検出
             if '"type": "end"' in sse_chunk:
-                logger.info(f"MOSProduct ストリーミング完了: session_id={session_id}, チャンク数={chunk_count}")
-                return full_response, current_user_id
-        
-        return full_response, current_user_id
+                logger.info(f"MOSProduct ストリーミング完了: session_id={session_id}, チャンク数={chunk_count} - 記憶保存処理継続中")
+
+                # 会話履歴を即座に更新（一度だけ）
+                if not history_updated and full_response.strip():
+                    self._update_chat_history_immediately(
+                        app, enhanced_query, full_response, current_user_id, session_id, main_loop
+                    )
+                    history_updated = True
+
+                # MemOSの内部処理（記憶保存等）を完了させるためループは継続
+
+        return full_response, current_user_id, history_updated
     
     def _update_chat_history_immediately(self, app, enhanced_query, full_response, current_user_id, session_id, main_loop):
         """会話履歴の即時更新とタグ処理"""
@@ -426,12 +435,12 @@ class WebSocketChatManager:
                 """
                 try:
                     # MOSProductのストリーミング処理
-                    full_response, current_user_id = self._process_mos_streaming(
+                    full_response, current_user_id, history_updated = self._process_mos_streaming(
                         app, enhanced_query, request_data, session_queue, main_loop, session_id
                     )
-                    
-                    # ストリーミング完了後の即時会話履歴更新
-                    if full_response.strip():
+
+                    # 履歴がまだ更新されていない場合のみ更新（フォールバック）
+                    if not history_updated and full_response.strip():
                         self._update_chat_history_immediately(
                             app, enhanced_query, full_response, current_user_id, session_id, main_loop
                         )
