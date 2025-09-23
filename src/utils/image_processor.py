@@ -112,8 +112,8 @@ async def generate_image_description(image_data_list: List[Dict[str, str]], coco
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
             ],
-            temperature=0.3,
-            max_tokens=1000,
+            temperature=1,
+            max_tokens=2000,
             **per_call_params
         )
         
