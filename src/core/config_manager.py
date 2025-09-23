@@ -81,7 +81,7 @@ class LoggingConfig(BaseModel):
     level_specific_lengths: Dict[str, int] = {
         "DEBUG": 200,
         "INFO": 200,
-        "WARNING": 400,
+        "WARNING": 1000,
         "ERROR": 10000,
         "CRITICAL": 10000
     }
