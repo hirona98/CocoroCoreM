@@ -253,7 +253,7 @@ class WebSocketChatManager:
             final_cleaned_response, reminders = self._extract_reminder_tags(memory_cleaned_response)
             
             # リマインダーがあれば登録
-            if reminders and hasattr(app, 'reminder_manager') and app.reminder_manager:
+            if reminders:
                 self._register_reminders_async(app, reminders, enhanced_query, main_loop)
             
             # クリーンな応答を履歴に追加
@@ -273,6 +273,11 @@ class WebSocketChatManager:
     def _register_reminders_async(self, app, reminders, enhanced_query, main_loop):
         """リマインダーの非同期登録"""
         try:
+            # reminder_managerの存在確認を修正
+            if not hasattr(app, 'reminder_manager') or app.reminder_manager is None:
+                logger.warning("リマインダーマネージャーが利用できません - リマインダー登録をスキップします")
+                return
+
             for reminder in reminders:
                 asyncio.run_coroutine_threadsafe(
                     app.reminder_manager.add_reminder(
@@ -479,7 +484,6 @@ class WebSocketChatManager:
                     sse_chunk = await asyncio.wait_for(session_queue.get(), timeout=0.5)
                     
                     if sse_chunk is None:  # 終了シグナル
-                        logger.info(f"終了シグナル受信: session_id={session_id}")
                         # 残りバッファを強制送信
                         await self._flush_text_buffer(session_info, websocket, session_id, force=True)
                         break

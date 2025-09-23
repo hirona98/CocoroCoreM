@@ -270,8 +270,8 @@ class ReminderManager:
             
             # アクティブなWebSocketクライアントにリマインダーを送信
             await chat_manager.handle_message(
-                target_client_id, 
-                ws_message, 
+                target_client_id,
+                ws_message,
                 self.app_instance
             )
             
