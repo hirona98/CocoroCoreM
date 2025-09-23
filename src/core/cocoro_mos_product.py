@@ -6,17 +6,14 @@ MemOSのMOSProductクラスを継承し、CocoroAIのシステムプロンプト
 """
 
 import logging
-import json
 from typing import Optional, Callable, List, Dict, Any
 
 from memos.mem_os.product import MOSProduct
 from memos.memories.textual.item import TextualMemoryItem
-from memos.mem_os.utils.format_utils import clean_json_response
 
 from .cocoro_prompts import (
     COCORO_MEMORY_INSTRUCTION,
     get_cocoro_reminder_instruction,
-    COCORO_SUGGESTION_PROMPT_JP,
     # Tree Reorganize Prompts
     REORGANIZE_PROMPT_JP,
     DOC_REORGANIZE_PROMPT_JP,
@@ -526,27 +523,14 @@ class CocoroMOSProduct(MOSProduct):
     
     def get_suggestion_query(self, user_id: str, language: str = "ja") -> List[str]:
         """
-        CocoroAI専用サジェスチョンクエリ生成（日本語専用）
-        
+        CocoroAI専用サジェスチョンクエリ生成（無効化）
+
         Args:
             user_id: ユーザーID
             language: 言語設定（日本語固定）
-            
+
         Returns:
-            List[str]: サジェスチョンクエリのリスト
+            List[str]: 空のリスト（機能無効化）
         """
-        # 最近の記憶を取得
-        text_mem_result = super().search("my recently memories", user_id=user_id, top_k=3)[
-            "text_mem"
-        ]
-        if text_mem_result:
-            memories = "\n".join([m.memory for m in text_mem_result[0]["memories"]])
-        else:
-            memories = ""
-        
-        # 日本語プロンプトでクエリ生成
-        message_list = [{"role": "system", "content": COCORO_SUGGESTION_PROMPT_JP.format(memories=memories)}]
-        response = self.chat_llm.generate(message_list)
-        clean_response = clean_json_response(response)
-        response_json = json.loads(clean_response)
-        return response_json["query"]
+        # サジェスチョン機能は使用しないため、常に空のリストを返す
+        return []
