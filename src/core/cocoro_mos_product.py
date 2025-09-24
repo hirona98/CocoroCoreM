@@ -127,8 +127,6 @@ class CocoroMOSProduct(MOSProduct):
                     "memory_reranking": MEMORY_RERANKING_PROMPT_JP,
                     "query_keywords_extraction": QUERY_KEYWORDS_EXTRACTION_PROMPT_JP,
                 })
-                
-            logger.info("🎌 MemOS全機能のプロンプトを日本語版に置換完了")
             
         except ImportError as e:
             logger.warning(f"MemOSモジュールのインポートに失敗: {e}")

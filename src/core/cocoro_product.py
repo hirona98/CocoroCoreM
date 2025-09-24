@@ -82,10 +82,9 @@ class CocoroProductWrapper:
                 'api_key': api_key,
                 'max_tokens': current_character.max_tokens,
                 'extra_config': {},
-                # 埋め込み設定を追加（既存フィールド使用、設定必須）
                 'embedding_model': current_character.embeddedModel,
                 'embedding_api_key': embedding_api_key,
-                'embedding_base_url': current_character.get_embedded_base_url()  # 埋め込み専用ベースURL
+                'embedding_base_url': current_character.get_embedded_base_url()
             }
             
             # localLLMBaseUrlが設定されている場合は追加

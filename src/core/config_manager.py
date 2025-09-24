@@ -310,12 +310,8 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig", use_rela
         db_path = str(memory_dir / "memos_users.db")
         scheduler_dump_path = str(memory_dir / "scheduler")
 
-    # 注意：MemOSの標準embedderは使用せず、LiteLLMEmbedderで置き換えるため、
-    # 複雑な環境変数設定は不要（CocoroMOSProductで直接置き換え）
-    logger.info(f"埋め込み設定: model={embedded_model}, provider={embedded_provider}")
-    logger.info(f"注意: 実際の埋め込み処理はLiteLLMEmbedderで実行されます")
-
     # MemOS設定を動的に構築
+    # 実際の実行時はCocoroMOSProductでLiteLLMEmbedderに置き換えられる
     memos_config = {
         "user_id": current_character.memoryId,  # キャラクター固有のユーザーIDを使用
         "chat_model": {"backend": "openai", "config": {"model_name_or_path": llm_model, "api_key": api_key, "api_base": "https://api.openai.com/v1"}},
@@ -344,10 +340,6 @@ def generate_memos_config_from_setting(cocoro_config: "CocoroAIConfig", use_rela
         # PRO_MODE (Chain of Thought) 設定
         "PRO_MODE": cocoro_config.enable_pro_mode,
     }
-    
-    # 注意：下記のMemOS embedder設定は初期化時のみ使用され、
-    # 実際の実行時はCocoroMOSProductでLiteLLMEmbedderに置き換えられます
-    logger.info(f"MemOS標準embedder設定（初期化後に置き換え予定）: {embedded_model}")
 
     # Memory Scheduler設定を追加（常に有効）
     scheduler_config = {

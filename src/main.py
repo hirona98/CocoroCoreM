@@ -40,6 +40,33 @@ class HealthCheckFilter(logging.Filter):
         return not (hasattr(record, 'getMessage') and '/api/health' in record.getMessage())
 
 
+class DispatcherMonitorFilter(logging.Filter):
+    """MemOSのdispatcher監視ログを除外するフィルター"""
+    def filter(self, record):
+        if not hasattr(record, 'getMessage'):
+            return True
+
+        message = record.getMessage()
+        # 除外したいメッセージパターン
+        exclude_patterns = [
+            "Pool 'dispatcher'. is_healthy: False",
+            "Pool 'dispatcher' unhealthy",
+            "Attempting to restart thread pool 'dispatcher'",
+            "Successfully restarted thread pool 'dispatcher'",
+            "Unregistered thread pool 'dispatcher'",
+            "Registered thread pool 'dispatcher' for monitoring",
+            "Cancelled 0/0 pending tasks",
+            "No active worker threads"
+        ]
+
+        # いずれかのパターンに一致したら除外
+        for pattern in exclude_patterns:
+            if pattern in message:
+                return False
+
+        return True
+
+
 class TruncatingFormatter(logging.Formatter):
     """メッセージ長を制限するカスタムフォーマッター（レベル別対応）"""
     
@@ -137,7 +164,15 @@ def setup_logging():
     logging.getLogger("memos.utils").setLevel(logging.WARNING)
     logging.getLogger("memos.llms.openai").setLevel(logging.WARNING)
     logging.getLogger("memos.memories.textual.tree_text_memory.retrieve.searcher").setLevel(logging.ERROR)
-    
+
+    # MemOS dispatcher監視ログにフィルターを追加
+    dispatcher_logger = logging.getLogger("memos.mem_scheduler.monitors.dispatcher_monitor")
+    dispatcher_logger.addFilter(DispatcherMonitorFilter())
+
+    # MemOS dispatcher本体のログにもフィルターを追加
+    dispatcher_main_logger = logging.getLogger("memos.mem_scheduler.general_modules.dispatcher")
+    dispatcher_main_logger.addFilter(DispatcherMonitorFilter())
+
     # アプリログレベル
     logging.getLogger("api.websocket_chat").setLevel(logging.INFO)
 
