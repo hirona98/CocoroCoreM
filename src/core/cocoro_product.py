@@ -304,9 +304,10 @@ class CocoroProductWrapper:
         
         # 2. MemOS標準フローに従ったキューブ初期化
         
-        # 現在のキャラクター設定からAPIキーを取得
+        # 現在のキャラクター設定からAPIキーとモデルを取得
         current_character = self.cocoro_config.current_character
         api_key = current_character.apiKey if current_character and current_character.apiKey else ""
+        llm_model = current_character.llmModel if current_character and current_character.llmModel else "gpt-4o-mini"
         
         # 最小限のconfig.jsonを作成（MemOSの標準フロー）
         import json
@@ -336,15 +337,15 @@ class CocoroProductWrapper:
                     "extractor_llm": {
                         "backend": "openai",
                         "config": {
-                            "model_name_or_path": "gpt-4o-mini",
+                            "model_name_or_path": llm_model,
                             "api_key": api_key,
                             "api_base": "https://api.openai.com/v1"
                         }
                     },
                     "dispatcher_llm": {
-                        "backend": "openai", 
+                        "backend": "openai",
                         "config": {
-                            "model_name_or_path": "gpt-4o-mini",
+                            "model_name_or_path": llm_model,
                             "api_key": api_key,
                             "api_base": "https://api.openai.com/v1"
                         }
