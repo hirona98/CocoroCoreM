@@ -113,7 +113,7 @@ async def generate_image_description(image_data_list: List[Dict[str, str]], coco
                 {"role": "user", "content": user_content},
             ],
             temperature=1,
-            max_tokens=current_character.max_tokens,
+            max_tokens=current_character.max_tokens_vision,
             **per_call_params
         )
         
