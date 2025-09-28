@@ -47,7 +47,6 @@ interface ChatRequest {
   // 機能別コンテキスト
   notification?: NotificationData;                                       // 通知データ（通知機能時）
   reminder?: ReminderData;                                              // リマインダーデータ（リマインダー機能時）
-  desktop_context?: DesktopContext;                                     // デスクトップコンテキスト（監視機能時）
   
   // オプション
   history?: HistoryMessage[];                                           // 会話履歴（セッション管理はMemOS側で自動実行）
@@ -69,13 +68,6 @@ interface NotificationData {
 interface ReminderData {
   requirement: string;              // リマインダー要件（必須）
   triggered_at: string;             // トリガー時刻（ISO形式、必須）
-}
-
-interface DesktopContext {
-  window_title: string;             // ウィンドウタイトル（必須）
-  application: string;              // アプリケーション名（必須）
-  capture_type: "active" | "full";  // キャプチャタイプ（必須）
-  timestamp: string;                // キャプチャ時刻（ISO形式、必須）
 }
 
 interface HistoryMessage {
@@ -252,21 +244,15 @@ interface ErrorMessage {
   "action": "chat",
   "session_id": "dock_20240120123456789",
   "request": {
-    "query": "デスクトップ画面を見て感想を教えて",
+    "query": "",
     "chat_type": "desktop_watch",
-    "desktop_context": {
-      "window_title": "Visual Studio Code - main.py",
-      "application": "Visual Studio Code",
-      "capture_type": "active",
-      "timestamp": "2024-01-20T12:34:56.789Z"
-    },
     "images": [/* スクリーンショット */]
   }
 }
 ```
 
 **処理フロー**:
-1. **コンテキスト統合**: デスクトップコンテキストを自動的にクエリに統合（例：「【デスクトップ監視】Visual Studio Codeで作業中\nウィンドウタイトル: Visual Studio Code - main.py\n\nデスクトップ画面を見て感想を教えて」）
+1. **コンテキスト統合**: デスクトップコンテキストを自動的にクエリに統合
 2. **MOSProduct処理**: 統合されたクエリでCocoroMOSProduct.chat_with_references()処理  
 3. **独り言生成**: キャラクター性を活かした独り言形式の応答
 4. **応答配信**: WebSocketストリーミング配信
@@ -316,7 +302,7 @@ interface ErrorMessage {
 
 1. **受信**: クライアントからWebSocketメッセージ受信
 2. **検証**: action="chat"、リクエスト形式の検証
-3. **コンテキスト統合**: chat_typeに応じた自動コンテキスト統合（通知・デスクトップ監視）
+3. **コンテキスト統合**: chat_typeに応じた自動コンテキスト統合
 4. **画像処理**: 画像付きリクエストの場合、画像説明生成（LLM使用）
 5. **クエリ拡張**: 機能別プロンプト構築とクエリ拡張
 6. **処理開始**: ThreadPoolExecutorで別スレッドでCocoroMOSProduct.chat_with_references()実行

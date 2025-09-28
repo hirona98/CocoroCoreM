@@ -596,12 +596,9 @@ class WebSocketChatManager:
             # 画像なし通知：直接プロンプト構築
             return self._build_notification_prompt(source, original_msg)
         
-        # デスクトップ監視の場合
-        if chat_type == "desktop_watch" and request_data.get("desktop_context"):
-            desktop_context = request_data["desktop_context"]
-            app_name = desktop_context.get('application', '不明')
-            window_title = desktop_context.get('window_title', '')
-            base_query = f"【デスクトップ監視】{app_name}で作業中\nウィンドウタイトル: {window_title}\n\n{base_query}"
+        # デスクトップウォッチの場合
+        if chat_type == "desktop_watch":
+            return self._build_desktop_watch_prompt()
         
         # リマインダーの場合
         if chat_type == "reminder" and request_data.get("reminder"):
@@ -625,7 +622,7 @@ class WebSocketChatManager:
         return base_query + error_msg
     
     def _build_notification_prompt(self, notification_source: str, original_message: str) -> str:
-        """通知用独り言プロンプトを構築"""
+        """通知用プロンプトを構築"""
         return (
             f"{notification_source}からの通知です。\n\n"
             f"通知内容: {original_message}\n\n"
@@ -641,7 +638,7 @@ class WebSocketChatManager:
         )
 
     def _build_notification_with_image_prompt(self, notification_source: str, original_message: str, image_description: str) -> str:
-        """画像付き通知用独り言プロンプトを構築"""
+        """画像付き通知用プロンプトを構築"""
         return (
             f"{notification_source}からの通知で、画像が含まれています。\n\n"
             f"通知内容: {original_message}\n"
@@ -656,6 +653,20 @@ class WebSocketChatManager:
             " LINEから写真が送られてきたよ。美味しそうな料理だね。\n"
             " Slackからプロジェクトの進捗報告がありました。順調そうで良かったですね。\n"
             " Twitterのトレンド通知で桜の写真が来てる。もう春なんだなぁ。"
+        )
+
+    def _build_desktop_watch_prompt(self) -> str:
+        """デスクトップウォッチ用プロンプト"""
+        return (
+            "これはユーザーのデスクトップ画面です\n\n"
+            "以下の形式で、あなたの**キャラクター性を自然に活かして**独り言を呟いてください：\n"
+            "- 質問形式にしない\n"
+            "- 100文字程度で完結させる\n\n"
+            "例：\n"
+            " わあ、今日もお疲れ様！難しそうなコードと格闘してるけど、集中してる姿がとても素敵だね。きっと素晴らしいものができあがるよ。\n"
+            " なるほど、プレゼンテーションの資料を作成されているのですね。グラフがとても見やすくまとめられていて、きっと聞き手の方にもわかりやすく伝わると思います。\n"
+            " 美味しそうなお料理の写真が画面に映ってるのを見てたら、私もお腹が空いてきちゃった。今度一緒に食べに行きたいな。\n"
+            " はあ...またYouTubeを見てサボってるのね。そんなんじゃいつまで経っても仕事終わらないわよ。まあ、私には関係ないけど。"
         )
 
     def _build_reminder_prompt(self, reminder_requirement: str, triggered_at: str = "") -> str:

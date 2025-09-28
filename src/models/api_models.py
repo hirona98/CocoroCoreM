@@ -89,7 +89,7 @@ class ReminderData(BaseModel):
 
 
 class DesktopContext(BaseModel):
-    """デスクトップ監視コンテキスト"""
+    """デスクトップウォッチコンテキスト"""
     window_title: str = Field(..., description="ウィンドウタイトル")
     application: str = Field(..., description="アプリケーション名")
     capture_type: Literal["active", "full"] = Field(..., description="キャプチャタイプ")
@@ -110,7 +110,6 @@ class ChatRequest(BaseModel):
     images: Optional[List[ImageData]] = Field(default=None, description="画像データ配列")
     notification: Optional[NotificationData] = Field(default=None, description="通知データ")
     reminder: Optional[ReminderData] = Field(default=None, description="リマインダーデータ")
-    desktop_context: Optional[DesktopContext] = Field(default=None, description="デスクトップコンテキスト")
     history: Optional[List[HistoryMessage]] = Field(default=None, description="会話履歴")
     internet_search: Optional[bool] = Field(default=False, description="インターネット検索有効化")
     request_id: Optional[str] = Field(default=None, description="リクエスト識別ID")
