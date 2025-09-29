@@ -12,6 +12,11 @@ import os
 from pathlib import Path
 from typing import Optional, Any
 
+# Neo4j接続用環境変数を早期に設定（MemOS初期化前に必須）
+# MemOSスケジューラー用（MEMSCHEDULER_GRAPHDBAUTH_ プレフィックス）
+os.environ["MEMSCHEDULER_GRAPHDBAUTH_USER"] = "neo4j"
+os.environ["MEMSCHEDULER_GRAPHDBAUTH_PASSWORD"] = "password"  # cocoro_product.pyと同じ値
+
 # 作業ディレクトリをCocoroAIプロジェクトルートに変更（相対パス対応）
 project_root = Path(__file__).parent.parent.parent
 if os.getcwd() != str(project_root):
@@ -345,7 +350,17 @@ class CocoroCoreMApp:
                     pass
                 memos.log.dictConfig = disabled_dictConfig
                 logger.info("MemOSのdictConfigを事前無効化しました")
-                
+
+                # RabbitMQ初期化メソッドを無効化するシンプルなパッチ
+                import memos.mem_scheduler.webservice_modules.rabbitmq_service
+                def disabled_initialize_rabbitmq(self, *args, **kwargs):
+                    logger.info("RabbitMQ初期化をスキップしました（CocoroAIでは不使用）")
+                    return
+
+                # パッチを適用
+                memos.mem_scheduler.webservice_modules.rabbitmq_service.RabbitMQSchedulerModule.initialize_rabbitmq = disabled_initialize_rabbitmq
+                logger.info("RabbitMQ初期化無効化パッチを適用しました")
+
                 # CocoroProductWrapperの遅延インポート（memosモジュール含む）
                 logger.info("MemOSモジュールをインポート中...")
                 from core.cocoro_product import CocoroProductWrapper
