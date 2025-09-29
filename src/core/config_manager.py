@@ -107,8 +107,8 @@ class CocoroAIConfig(BaseModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
     # MemOS高度機能設定
-    enable_query_rewriting: bool = Field(default=True, description="文脈依存クエリの書き換え機能を有効にする")
-    enable_pro_mode: bool = Field(default=True, description="PRO_MODE（Chain of Thought）を有効にする")
+    enable_query_rewriting: bool = Field(default=False, description="文脈依存クエリの書き換え機能を有効にする")
+    enable_pro_mode: bool = Field(default=False, description="PRO_MODE（Chain of Thought）を有効にする")
     enable_internet_retrieval: bool = Field(default=False, description="インターネット検索機能を有効にする")
     enable_memory_scheduler: bool = Field(default=True, description="メモリスケジューラーを有効にする（常に有効）")
     enable_activation_memory: bool = Field(default=False, description="アクティベーションメモリ更新を有効にする（API経由LLMでは通常無効）")

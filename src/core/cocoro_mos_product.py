@@ -79,6 +79,8 @@ class CocoroMOSProduct(MOSProduct):
             # Mem ReaderとMem SchedulerもLiteLLMで統一
             self._setup_litellm_mem_reader(litellm_config)
             self._setup_litellm_mem_scheduler(litellm_config)
+            # TreeTextMemoryのdispatcher_llmもLiteLLMで統一（TaskGoalParser用）
+            self._setup_litellm_tree_text_memory(litellm_config)
         
         logger.info(f"CocoroMOSProduct初期化完了: LiteLLM={'有効' if litellm_config else '無効'}")
     
@@ -374,7 +376,61 @@ class CocoroMOSProduct(MOSProduct):
             logger.error(f"❌ Mem Scheduler LiteLLM統合失敗: {e}")
             # mem_scheduler置き換え失敗は非致命的
             logger.warning("Mem Scheduler機能に問題がありますが、他の機能は正常に動作します")
-    
+
+    def _setup_litellm_tree_text_memory(self, config: Dict[str, Any]):
+        """TreeTextMemoryのdispatcher_llm置き換え（TaskGoalParser用）"""
+        try:
+            from .litellm_wrapper import LiteLLMConfig, LiteLLMWrapper
+
+            # TreeTextMemory用LiteLLMConfig作成（LLM用、設定必須）
+            if 'model' not in config or not config['model']:
+                raise ValueError("❌ LiteLLM設定にmodelが設定されていません")
+            self._ensure_api_key(config, 'api_key', 'TreeTextMemory用')
+
+            # TaskGoalParser用のLiteLLMWrapperを作成（JSON配列ラッパーは不要）
+            tree_memory_config = LiteLLMConfig(
+                model_name=config['model'],
+                api_key=config['api_key'],
+                base_url=config.get('base_url'),
+                max_tokens=config.get('max_tokens', 8192),
+                extra_config=config.get('extra_config', {})
+            )
+
+            # LiteLLMWrapperインスタンスを作成
+            litellm_wrapper = LiteLLMWrapper(tree_memory_config)
+
+            # 全MemCube内のTreeTextMemoryのdispatcher_llmを置き換え
+            if hasattr(self, 'mem_cubes') and self.mem_cubes is not None:
+                replaced_count = 0
+
+                for cube_id, mem_cube in self.mem_cubes.items():
+                    if hasattr(mem_cube, 'text_mem') and mem_cube.text_mem is not None:
+                        # TreeTextMemoryのdispatcher_llm属性をチェック
+                        if hasattr(mem_cube.text_mem, 'dispatcher_llm') and mem_cube.text_mem.dispatcher_llm is not None:
+                            # 元のdispatcher_llmの型をチェック（MemOS標準LLMかどうか）
+                            original_dispatcher = mem_cube.text_mem.dispatcher_llm
+                            dispatcher_type = type(original_dispatcher).__name__
+
+                            # MemOS標準のLLMクラス（OpenAI, Ollama, Azure等）の場合のみ置き換え
+                            if hasattr(original_dispatcher, 'generate') and hasattr(original_dispatcher, 'client'):
+                                mem_cube.text_mem.dispatcher_llm = litellm_wrapper
+                                replaced_count += 1
+                                logger.debug(f"MemCube {cube_id} のTreeTextMemory.dispatcher_llmをLiteLLMに置き換え ({dispatcher_type} → LiteLLMWrapper)")
+                            else:
+                                logger.debug(f"MemCube {cube_id} のdispatcher_llmは既にカスタムLLM ({dispatcher_type})")
+                        else:
+                            logger.debug(f"MemCube {cube_id} のTreeTextMemoryにdispatcher_llmが見つかりません")
+
+                logger.info(f"🔄 TreeTextMemory dispatcher_llm をLiteLLMに置き換え完了: {replaced_count}個のMemCube")
+            else:
+                logger.warning("mem_cubes が見つかりません")
+
+        except Exception as e:
+            logger.error(f"❌ TreeTextMemory LiteLLM統合失敗: {e}")
+            # TreeTextMemory置き換え失敗は重要（TaskGoalParserのAPIキーエラーの根本原因）
+            logger.error("TreeTextMemory機能の問題により、TaskGoalParserでAPIキーエラーが発生する可能性があります")
+            # 但し、致命的エラーにはしない（他の機能は動作可能）
+
     def _replace_llm_recursive(self, obj, litellm_wrapper, parent_name: str, max_depth: int = 3) -> int:
         """オブジェクト内の_process_llmを再帰的に置き換え"""
         if max_depth <= 0:
@@ -416,14 +472,18 @@ class CocoroMOSProduct(MOSProduct):
         return replaced_count
     
     def register_mem_cube(self, *args, **kwargs):
-        """MemCube登録をオーバーライドして、登録後にLiteLLMEmbedderに置き換え"""
+        """MemCube登録をオーバーライドして、登録後にLiteLLMEmbedderとTreeTextMemory dispatcher_llmに置き換え"""
         # 親クラスの標準登録処理を実行
         result = super().register_mem_cube(*args, **kwargs)
-        
+
         # LiteLLMEmbedderが準備されている場合は新しいMemCubeのembedderを置き換え
         if hasattr(self, '_litellm_embedder') and self._litellm_embedder is not None:
             self._replace_new_memcube_embedder()
-        
+
+        # LiteLLM統合が有効な場合は新しいMemCubeのTreeTextMemory dispatcher_llmも置き換え
+        if hasattr(self, 'chat_llm') and hasattr(self.chat_llm, '__class__') and 'LiteLLMWrapper' in str(self.chat_llm.__class__):
+            self._replace_new_memcube_tree_text_memory()
+
         return result
     
     def _replace_new_memcube_embedder(self):
@@ -456,7 +516,45 @@ class CocoroMOSProduct(MOSProduct):
         except Exception as e:
             logger.error(f"❌ 新規MemCube embedder置き換え失敗: {e}")
             logger.warning("新しいMemCubeでEmbedding機能に問題がありますが、LLM機能は正常に動作します")
-    
+
+    def _replace_new_memcube_tree_text_memory(self):
+        """新しく作成されたMemCubeのTreeTextMemory dispatcher_llmをLiteLLMに置き換え"""
+        try:
+            from .litellm_wrapper import LiteLLMWrapper
+
+            # chat_llmがLiteLLMWrapperの場合のみ実行（設定が一致していることを確認）
+            if not hasattr(self, 'chat_llm') or not isinstance(self.chat_llm, LiteLLMWrapper):
+                logger.debug("chat_llmがLiteLLMWrapperではないため、TreeTextMemory置き換えをスキップ")
+                return
+
+            replaced_count = 0
+            for cube_id, mem_cube in self.mem_cubes.items():
+                if hasattr(mem_cube, 'text_mem') and mem_cube.text_mem is not None:
+                    # TreeTextMemoryのdispatcher_llm属性をチェック
+                    if hasattr(mem_cube.text_mem, 'dispatcher_llm') and mem_cube.text_mem.dispatcher_llm is not None:
+                        # 現在のdispatcher_llmの型をチェック
+                        current_dispatcher = mem_cube.text_mem.dispatcher_llm
+                        dispatcher_type = type(current_dispatcher).__name__
+
+                        # MemOS標準LLMの場合のみ置き換え（既にLiteLLMの場合はスキップ）
+                        if (hasattr(current_dispatcher, 'generate') and
+                            hasattr(current_dispatcher, 'client') and
+                            'LiteLLMWrapper' not in dispatcher_type):
+
+                            # chat_llmと同じ設定でLiteLLMWrapperを作成（一貫性のため）
+                            mem_cube.text_mem.dispatcher_llm = self.chat_llm
+                            replaced_count += 1
+                            logger.info(f"🔄 新規MemCube {cube_id} のTreeTextMemory.dispatcher_llmをLiteLLMに置き換え完了 ({dispatcher_type} → LiteLLMWrapper)")
+                        else:
+                            logger.debug(f"新規MemCube {cube_id} のdispatcher_llmは既にLiteLLM ({dispatcher_type})")
+
+            if replaced_count > 0:
+                logger.info(f"✅ 新規MemCube TreeTextMemory dispatcher_llm置き換え完了: {replaced_count}個")
+
+        except Exception as e:
+            logger.error(f"❌ 新規MemCube TreeTextMemory dispatcher_llm置き換え失敗: {e}")
+            logger.warning("新しいMemCubeでTreeTextMemory機能に問題がありますが、他の機能は正常に動作します")
+
     def _build_enhance_system_prompt(
         self, user_id: str, memories_all: List[TextualMemoryItem]
     ) -> str:
