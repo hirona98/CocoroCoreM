@@ -532,3 +532,16 @@ class CocoroMOSProduct(MOSProduct):
         """
         # サジェスチョン機能は使用しないため、常に空のリストを返す
         return []
+
+    def _get_further_suggestion(self, message=None):
+        """
+        チャット内サジェスト生成（無効化）
+
+        Args:
+            message: メッセージリスト（使用しない）
+
+        Returns:
+            list: 空のリスト（機能無効化）
+        """
+        # サジェスチョン機能は使用しないため、常に空のリストを返す
+        return []
