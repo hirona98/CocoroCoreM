@@ -387,7 +387,7 @@ class CocoroMOSProduct(MOSProduct):
                 raise ValueError("❌ LiteLLM設定にmodelが設定されていません")
             self._ensure_api_key(config, 'api_key', 'TreeTextMemory用')
 
-            # TaskGoalParser用のLiteLLMWrapperを作成（JSON配列ラッパーは不要）
+            # TaskGoalParser用のLiteLLMWrapperを作成（JSON正規化ラッパー付き）
             tree_memory_config = LiteLLMConfig(
                 model_name=config['model'],
                 api_key=config['api_key'],
@@ -397,7 +397,40 @@ class CocoroMOSProduct(MOSProduct):
             )
 
             # LiteLLMWrapperインスタンスを作成
-            litellm_wrapper = LiteLLMWrapper(tree_memory_config)
+            base_litellm_wrapper = LiteLLMWrapper(tree_memory_config)
+
+            # TaskGoalParser専用：JSON正規化ラッパーを適用
+            # MemOSのTaskGoalParserはeval()を使用するため、JSON形式をPython形式に変換
+            class _TaskGoalParserJSONWrapper:
+                """TaskGoalParser用JSON正規化ラッパー（eval()対応）"""
+                def __init__(self, base_llm):
+                    self._base = base_llm
+
+                def generate(self, messages, **kwargs):
+                    text = self._base.generate(messages, **kwargs)
+
+                    # JSON形式をPython eval()で解析可能な形式に正規化
+                    # 小文字のJSON boolean/null値を大文字のPython値に変換
+                    normalized_text = str(text)
+                    normalized_text = normalized_text.replace(': false', ': False')
+                    normalized_text = normalized_text.replace(': true', ': True')
+                    normalized_text = normalized_text.replace(': null', ': None')
+
+                    # JSON配列内も対応
+                    normalized_text = normalized_text.replace('[false', '[False')
+                    normalized_text = normalized_text.replace('[true', '[True')
+                    normalized_text = normalized_text.replace('[null', '[None')
+                    normalized_text = normalized_text.replace(', false', ', False')
+                    normalized_text = normalized_text.replace(', true', ', True')
+                    normalized_text = normalized_text.replace(', null', ', None')
+
+                    return normalized_text
+
+                # その他の属性/メソッドは委譲
+                def __getattr__(self, name):
+                    return getattr(self._base, name)
+
+            litellm_wrapper = _TaskGoalParserJSONWrapper(base_litellm_wrapper)
 
             # 全MemCube内のTreeTextMemoryのdispatcher_llmを置き換え
             if hasattr(self, 'mem_cubes') and self.mem_cubes is not None:
