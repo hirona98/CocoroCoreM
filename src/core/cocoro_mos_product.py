@@ -409,9 +409,22 @@ class CocoroMOSProduct(MOSProduct):
                 def generate(self, messages, **kwargs):
                     text = self._base.generate(messages, **kwargs)
 
+                    # マークダウンコードブロックを除去
+                    normalized_text = str(text).strip()
+
+                    # ```json ... ``` 形式の除去
+                    if normalized_text.startswith('```'):
+                        lines = normalized_text.split('\n')
+                        # 最初の行（```json）を除去
+                        if lines[0].startswith('```'):
+                            lines = lines[1:]
+                        # 最後の行（```）を除去
+                        if lines and lines[-1].strip() == '```':
+                            lines = lines[:-1]
+                        normalized_text = '\n'.join(lines).strip()
+
                     # JSON形式をPython eval()で解析可能な形式に正規化
                     # 小文字のJSON boolean/null値を大文字のPython値に変換
-                    normalized_text = str(text)
                     normalized_text = normalized_text.replace(': false', ': False')
                     normalized_text = normalized_text.replace(': true', ': True')
                     normalized_text = normalized_text.replace(': null', ': None')
