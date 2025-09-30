@@ -80,11 +80,11 @@ class LoggingConfig(BaseModel):
     truncate_marker: str = "【切り詰め】"
     max_message_length: int = 2048  # デフォルト値
     level_specific_lengths: Dict[str, int] = {
-        "DEBUG": 200,
-        "INFO": 200,
-        "WARNING": 1000,
-        "ERROR": 10000,
-        "CRITICAL": 10000
+        "DEBUG": 400,
+        "INFO": 400,
+        "WARNING": 5000,
+        "ERROR": 5000,
+        "CRITICAL": 5000
     }
 
 

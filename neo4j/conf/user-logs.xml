@@ -49,7 +49,7 @@
 
     <Loggers>
         <!-- Log level for the neo4j log. One of DEBUG, INFO, WARN, ERROR or OFF -->
-        <Root level="INFO">
+        <Root level="WARN">
             <AppenderRef ref="Neo4jLog"/>
             <AppenderRef ref="ConsoleAppender"/>
         </Root>

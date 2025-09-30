@@ -76,7 +76,7 @@
         <!-- Log levels. One of DEBUG, INFO, WARN, ERROR or OFF -->
 
         <!-- The debug log is used as the root logger to catch everything -->
-        <Root level="INFO">
+        <Root level="WARN">
             <AppenderRef ref="DebugLog"/> <!-- Keep this -->
         </Root>
 

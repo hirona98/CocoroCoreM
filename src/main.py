@@ -158,29 +158,32 @@ def setup_logging():
     logging.getLogger("neo4j").setLevel(logging.INFO)
     logging.getLogger("neo4j.io").setLevel(logging.INFO)
     logging.getLogger("neo4j.pool").setLevel(logging.INFO)
-    logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
+    logging.getLogger("neo4j.notifications").setLevel(logging.INFO)
 
     # httpログレベル設定
     logging.getLogger("httpcore.http11").setLevel(logging.INFO)
-    logging.getLogger("httpcore.connection").setLevel(logging.WARNING)
+    logging.getLogger("httpcore.connection").setLevel(logging.INFO)
     logging.getLogger("openai").setLevel(logging.INFO)
     
     # MemOSのログレベル設定
-    logging.getLogger("memos.utils").setLevel(logging.WARNING)
-    logging.getLogger("memos.llms.openai").setLevel(logging.WARNING)
-    logging.getLogger("memos.memories.textual.tree_text_memory.retrieve.searcher").setLevel(logging.ERROR)
+    logging.getLogger("memos.utils").setLevel(logging.WARN)
+    logging.getLogger("memos.llms").setLevel(logging.INFO)
+    logging.getLogger("memos.memories.textual.tree_text_memory.retrieve.searcher").setLevel(logging.INFO)
 
-    # MemOS dispatcher監視ログにフィルターを追加
+    # MemOSスケジューラーのメインログレベル
+    logging.getLogger("memos.mem_scheduler").setLevel(logging.WARN)
+    # MemOS dispatcher監視ログにフィルターを追加(memos.mem_schedulerに依存)
     dispatcher_logger = logging.getLogger("memos.mem_scheduler.monitors.dispatcher_monitor")
     dispatcher_logger.addFilter(DispatcherMonitorFilter())
-
-    # MemOS dispatcher本体のログにもフィルターを追加
+    # MemOS dispatcher本体のログにもフィルターを追加(memos.mem_schedulerに依存)
     dispatcher_main_logger = logging.getLogger("memos.mem_scheduler.general_modules.dispatcher")
     dispatcher_main_logger.addFilter(DispatcherMonitorFilter())
 
     # アプリログレベル
     logging.getLogger("api.websocket_chat").setLevel(logging.INFO)
-
+    logging.getLogger("utils.neo4j_manager").setLevel(logging.INFO)
+    logging.getLogger("core.cocoro_mos_product").setLevel(logging.INFO)
+    
 logger = logging.getLogger(__name__)
 
 # コンポーネントのインポート
