@@ -290,26 +290,40 @@ class WebSocketChatManager:
         except Exception as reminder_error:
             logger.error(f"リマインダー登録エラー: {reminder_error}", exc_info=True)
     
+    def _has_incomplete_face_tag(self, buffer: str) -> bool:
+        """バッファ末尾に未完成の[face:xxx]タグがあるかチェック"""
+        # [だけで終わっている
+        if buffer.endswith('['):
+            return True
+        # [face, [face:, [face:Fun などの未完成パターン
+        if re.search(r'\[face(?::(?:[^\]]*)?)?$', buffer):
+            return True
+        return False
+
     def _find_last_sentence_boundary(self, buffer: str) -> int:
         """80文字以上のバッファで最後の句読点位置を探す"""
         if len(buffer) < 80:
             return -1
-        
+
+        # [face:xxx]のような特殊タグが未完成の場合は送信を待つ
+        if self._has_incomplete_face_tag(buffer):
+            return -1
+
         # 日本語文字が含まれているかチェック
         has_japanese = bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', buffer))
-        
+
         if has_japanese:
             # 日本語文書：主要な句読点のみ
             sentence_endings = re.compile(r'[。？．\n]')
         else:
             # 英語文書：ピリオドと改行のみ
             sentence_endings = re.compile(r'[.\n]')
-        
+
         # バッファ全体で最後の句読点を探す
         matches = list(sentence_endings.finditer(buffer))
         if not matches:
             return -1
-        
+
         # 最後の句読点位置を返す（80文字以上の場合のみ）
         last_match = matches[-1]
         return last_match.end()
