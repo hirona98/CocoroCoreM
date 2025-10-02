@@ -338,6 +338,21 @@ class WebSocketChatManager:
             # 強制送信：バッファ全体を送信
             send_content = buffer
             remaining_buffer = ""
+
+            # 未完成の[face:xxx]タグが末尾にある場合は送信を保留し、未完成部分を残す
+            if self._has_incomplete_face_tag(send_content):
+                try:
+                    m = re.search(r'\[face(?::(?:[^\]]*)?)?$', send_content)
+                    if m:
+                        remaining_buffer = send_content[m.start():]
+                        send_content = send_content[:m.start()]
+                        if not send_content.strip():
+                            session_info["text_buffer"] = remaining_buffer
+                            session_info["last_send_time"] = asyncio.get_event_loop().time()
+                            return
+                except Exception:
+                    session_info["last_send_time"] = asyncio.get_event_loop().time()
+                    return
         else:
             # 通常送信：適切な句読点位置を探す
             boundary_pos = self._find_last_sentence_boundary(buffer)
