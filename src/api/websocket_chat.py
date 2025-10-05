@@ -17,7 +17,7 @@ from fastapi import WebSocket, WebSocketDisconnect, Depends, APIRouter
 from pydantic import BaseModel
 
 from models.api_models import NotificationData, DesktopContext, ChatRequest, ImageData
-from utils.image_processor import generate_image_description, format_image_context_for_chat
+from utils.image_processor import generate_image_description
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ws", tags=["websocket"])
@@ -584,12 +584,15 @@ class WebSocketChatManager:
                 image_description = await generate_image_description(images, app.cocoro_product.cocoro_config)
                 
                 if image_description:
+                    # デスクトップウォッチの場合
+                    if chat_type == "desktop_watch":
+                        return self._build_desktop_watch_prompt(image_description)
+                    
                     # 画像付き通知の場合
                     if chat_type == "notification":
                         notification = request_data.get("notification", {})
                         source = notification.get('original_source', '不明なアプリ')
                         original_msg = notification.get('original_message', '')
-                        
                         enhanced_query = self._build_notification_with_image_prompt(
                             source, original_msg, image_description
                         )
@@ -597,10 +600,10 @@ class WebSocketChatManager:
                         return enhanced_query
                     
                     # 画像付きチャット
-                    else:
-                        enhanced_query = format_image_context_for_chat(image_description, base_query)
-                        logger.info(f"画像処理完了: 説明生成成功")
-                        return enhanced_query
+                    enhanced_query = self._format_image_context_for_chat(image_description, base_query)
+                    logger.info(f"画像処理完了: 説明生成成功")
+                    return enhanced_query
+                
                 else:
                     # 画像説明生成失敗時
                     logger.warning("画像説明の生成に失敗しました。テキストのみで処理を継続します。")
@@ -621,23 +624,19 @@ class WebSocketChatManager:
             notification = request_data["notification"]
             source = notification.get('original_source', '不明なアプリ')
             original_msg = notification.get('original_message', '')
-            
             # 画像なし通知：直接プロンプト構築
             return self._build_notification_prompt(source, original_msg)
-        
-        # デスクトップウォッチの場合
-        if chat_type == "desktop_watch":
-            return self._build_desktop_watch_prompt()
         
         # リマインダーの場合
         if chat_type == "reminder" and request_data.get("reminder"):
             reminder = request_data["reminder"]
             reminder_requirement = reminder.get('requirement', '')
             triggered_at = reminder.get('triggered_at', '')
-            
             # リマインダー専用プロンプト構築
             return self._build_reminder_prompt(reminder_requirement, triggered_at)
         
+        # 通常チャット
+        logger.info(f"通常チャット")
         return base_query
     
     async def _handle_image_processing_error(self, request_data: dict, chat_type: str, base_query: str, app, error_msg: str) -> str:
@@ -653,13 +652,13 @@ class WebSocketChatManager:
     def _build_notification_prompt(self, notification_source: str, original_message: str) -> str:
         """通知用プロンプトを構築"""
         return (
-            f"{notification_source}からの通知です。\n\n"
+            f"これは{notification_source}からの通知です。\n\n"
             f"通知内容: {original_message}\n\n"
             "以下の形式で、あなたの**キャラクター性を活かして**ユーザーに伝えてください：\n"
             "- 通知元と通知内容を含める\n"
             "- 最後に感想や意見を加える\n"
             "- 質問形式にしない\n"
-            "- 2～3文で完結させる\n\n"
+            "- 3文程度で完結させる\n\n"
             "例：\n"
             " LINEでメッセージが来たよ。返事しなきゃね。\n"
             " Slackから会議の通知がありました。準備しましょう。\n"
@@ -669,28 +668,29 @@ class WebSocketChatManager:
     def _build_notification_with_image_prompt(self, notification_source: str, original_message: str, image_description: str) -> str:
         """画像付き通知用プロンプトを構築"""
         return (
-            f"{notification_source}からの通知で、画像が含まれています。\n\n"
-            f"通知内容: {original_message}\n"
+            f"これは{notification_source}からの通知で、画像が含まれています。\n\n"
+            f"通知内容: {original_message}\n\n"
             f"画像内容: {image_description}\n\n"
             "以下の形式で、あなたの**キャラクター性を自然に活かして**ユーザーに伝えてください：\n"
             "- 通知元と通知内容を含める\n"
             "- 画像の内容についても軽く触れる（複数枚ある場合は総括して触れる）\n"
             "- 最後に感想や意見を加える\n"
             "- 質問形式にしない\n"
-            "- 2～3文で完結させる\n\n"
+            "- 3文程度で完結させる\n\n"
             "例：\n"
             " LINEから写真が送られてきたよ。美味しそうな料理だね。\n"
             " Slackからプロジェクトの進捗報告がありました。順調そうで良かったですね。\n"
             " Twitterのトレンド通知で桜の写真が来てる。もう春なんだなぁ。"
         )
 
-    def _build_desktop_watch_prompt(self) -> str:
+    def _build_desktop_watch_prompt(self, image_description: str) -> str:
         """デスクトップウォッチ用プロンプト"""
         return (
             "これはユーザーのデスクトップ画面です\n\n"
+            f"画像内容: {image_description}\n\n"
             "以下の形式で、あなたの**キャラクター性を自然に活かして**独り言を呟いてください：\n"
             "- 質問形式にしない\n"
-            "- 100文字程度で完結させる\n\n"
+            "- 3文程度で完結させる\n\n"
             "例：\n"
             " わあ、今日もお疲れ様！難しそうなコードと格闘してるけど、集中してる姿がとても素敵だね。きっと素晴らしいものができあがるよ。\n"
             " なるほど、プレゼンテーションの資料を作成されているのですね。グラフがとても見やすくまとめられていて、きっと聞き手の方にもわかりやすく伝わると思います。\n"
@@ -698,7 +698,14 @@ class WebSocketChatManager:
             " はあ...またYouTubeを見てサボってるのね。そんなんじゃいつまで経っても仕事終わらないわよ。まあ、私には関係ないけど。"
         )
 
-    def _build_reminder_prompt(self, reminder_requirement: str, triggered_at: str = "") -> str:
+    def _format_image_context_for_chat(self, image_description: str, user_query: str) -> str:
+        """画像付きチャット用プロンプト"""
+        return (
+            f"{user_query}\n\n"
+            f"添付画像: {image_description}"
+        )
+
+    def _build_reminder_prompt(self, reminder_requirement: str) -> str:
         """リマインダー用プロンプトを構築"""
         return (
             f"設定されたリマインダーの時間になりました。\n\n"
@@ -706,7 +713,7 @@ class WebSocketChatManager:
             "以下の形式で、あなたの**キャラクター性を活かして**ユーザーに知らせてください：\n"
             "- 時間になったことを伝える\n"
             "- コメントを加える\n"
-            "- 2～3文で完結させる\n\n"
+            "- 3文程度で完結させる\n\n"
             "例：\n"
             " 会議の時間だよ！準備はできた？\n"
             " お薬を飲む時間になりました。忘れずに飲んでくださいね。\n"

@@ -124,28 +124,3 @@ async def generate_image_description(image_data_list: List[Dict[str, str]], coco
     except Exception as e:
         logger.error(f"画像説明の生成に失敗しました: {e}")
         return None
-
-
-def format_image_context_for_chat(image_description: str, user_query: str) -> str:
-    """画像説明とユーザークエリを結合してチャット用のテキストを生成
-    
-    Args:
-        image_description: LLMからの画像説明
-        user_query: ユーザーのメッセージ
-        
-    Returns:
-        結合されたチャット用テキスト
-    """
-    if not image_description:
-        return user_query
-    
-    # 画像説明部分（先行）
-    image_section = f"━━━ 添付画像 ━━━\n{image_description.strip()}"
-    
-    # ユーザーメッセージがある場合は質問セクションとして追加
-    if user_query.strip():
-        user_section = f"━━━ ユーザー質問 ━━━\n{user_query.strip()}"
-        return f"{image_section}\n\n{user_section}"
-    else:
-        # 画像のみの場合
-        return image_section
