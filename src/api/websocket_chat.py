@@ -193,7 +193,7 @@ class WebSocketChatManager:
         ):
             chunk_count += 1
 
-            # アシスタントの回答を収集（会話履歴更新のため）
+            # キャラクターの回答を収集（会話履歴更新のため）
             if '"type": "text"' in sse_chunk:
                 try:
                     import json
