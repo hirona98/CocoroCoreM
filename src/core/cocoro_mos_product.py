@@ -52,7 +52,8 @@ class CocoroMOSProduct(MOSProduct):
     def __init__(self, default_config=None, max_user_instances=1, 
                  system_prompt_provider: Optional[Callable[[], Optional[str]]] = None,
                  # LiteLLM統合パラメータ
-                 litellm_config: Optional[Dict[str, Any]] = None):
+                 litellm_config: Optional[Dict[str, Any]] = None,
+                 reminder_enabled: bool = True):
         """
         初期化
         
@@ -82,7 +83,8 @@ class CocoroMOSProduct(MOSProduct):
             # TreeTextMemoryのdispatcher_llmもLiteLLMで統一（TaskGoalParser用）
             self._setup_litellm_tree_text_memory(litellm_config)
         
-        logger.info(f"CocoroMOSProduct初期化完了: LiteLLM={'有効' if litellm_config else '無効'}")
+        self.reminder_enabled = reminder_enabled
+        logger.info(f"CocoroMOSProduct初期化完了: LiteLLM={'有効' if litellm_config else '無効'}, リマインダー指示={'有効' if self.reminder_enabled else '無効'}")
     
     def _replace_memos_prompts_with_japanese(self):
         """
@@ -689,13 +691,22 @@ class CocoroMOSProduct(MOSProduct):
             if outer_memory_count > 0:
                 memory_sections += outer_memory_context
             
-            result_prompt = cocoro_prompt + COCORO_MEMORY_INSTRUCTION + get_cocoro_reminder_instruction() + memory_sections
-            logger.info(f"システムプロンプト構築完了: CocoroAI + 記憶指示 + リマインダー指示 + メモリ情報 (PersonalMemory: {personal_memory_count}, OuterMemory: {outer_memory_count})")
+            # リマインダー有無
+            reminder_instruction = get_cocoro_reminder_instruction() if self.reminder_enabled else ""
+            result_prompt = cocoro_prompt + COCORO_MEMORY_INSTRUCTION + reminder_instruction + memory_sections
+            if self.reminder_enabled:
+                logger.info(f"システムプロンプト構築完了: CocoroAI + 記憶指示 + リマインダー指示 + メモリ情報 (PersonalMemory: {personal_memory_count}, OuterMemory: {outer_memory_count})")
+            else:
+                logger.info(f"システムプロンプト構築完了: CocoroAI + 記憶指示 + メモリ情報 (リマインダー指示除外, PersonalMemory: {personal_memory_count}, OuterMemory: {outer_memory_count})")
             return result_prompt
         
-        # メモリがない場合はCocoroAIプロンプト + リマインダー指示のみ
-        result_prompt = cocoro_prompt + get_cocoro_reminder_instruction()
-        logger.info("システムプロンプト構築完了: CocoroAIプロンプト + リマインダー指示")
+        # メモリがない場合はCocoroAIプロンプト + リマインダー有無
+        reminder_instruction = get_cocoro_reminder_instruction() if self.reminder_enabled else ""
+        result_prompt = cocoro_prompt + reminder_instruction
+        if self.reminder_enabled:
+            logger.info("システムプロンプト構築完了: CocoroAIプロンプト + リマインダー指示")
+        else:
+            logger.info("システムプロンプト構築完了: CocoroAIプロンプト (リマインダー指示除外)")
         return result_prompt
     
     def get_suggestion_query(self, user_id: str, language: str = "ja") -> List[str]:

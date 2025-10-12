@@ -112,6 +112,7 @@ class CocoroAIConfig(BaseModel):
     enable_internet_retrieval: bool = Field(default=False, description="インターネット検索機能を有効にする")
     enable_memory_scheduler: bool = Field(default=True, description="メモリスケジューラーを有効にする（常に有効）")
     enable_activation_memory: bool = Field(default=False, description="アクティベーションメモリ更新を有効にする（API経由LLMでは通常無効）")
+    isEnableReminder: bool = Field(..., description="リマインダー機能を有効にする")
 
     # Memory Scheduler詳細設定
     scheduler_top_k: int = Field(default=5, description="スケジューラーのメモリ取得数")

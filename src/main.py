@@ -384,16 +384,20 @@ class CocoroCoreMApp:
                 raise
             
             # リマインダーマネージャー初期化
-            try:
-                logger.info("リマインダーマネージャーを初期化しています...")
-                self.reminder_manager = ReminderManager(app_instance=self)
-                # 起動時に既存のアクティブリマインダーを再読み込み
-                await self.reminder_manager.reload_active_reminders()
-                logger.info("リマインダーマネージャー初期化完了")
-            except Exception as e:
-                logger.error(f"リマインダーマネージャー初期化エラー: {e}")
-                # リマインダー機能が失敗しても起動は継続
+            if not self.config.isEnableReminder:
+                logger.info("リマインダー機能は設定で無効化されています。初期化をスキップします。")
                 self.reminder_manager = None
+            else:
+                try:
+                    logger.info("リマインダーマネージャーを初期化しています...")
+                    self.reminder_manager = ReminderManager(app_instance=self)
+                    # 起動時に既存のアクティブリマインダーを再読み込み
+                    await self.reminder_manager.reload_active_reminders()
+                    logger.info("リマインダーマネージャー初期化完了")
+                except Exception as e:
+                    logger.error(f"リマインダーマネージャー初期化エラー: {e}")
+                    # リマインダー機能が失敗しても起動は継続
+                    self.reminder_manager = None
             
             logger.info("CocoroCoreM初期化完了")
             return True  # 正常起動完了

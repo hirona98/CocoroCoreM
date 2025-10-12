@@ -103,7 +103,8 @@ class CocoroProductWrapper:
             default_config=mos_config,
             max_user_instances=1,  # シングルユーザー
             system_prompt_provider=self.get_system_prompt,  # CocoroAIシステムプロンプト取得関数を渡す
-            litellm_config=litellm_config  # LiteLLM設定辞書
+            litellm_config=litellm_config,  # LiteLLM設定辞書
+            reminder_enabled=cocoro_config.isEnableReminder
         )
         
         # 画像・メッセージ生成器は後で初期化（循環参照回避）

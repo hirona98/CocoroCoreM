@@ -273,6 +273,13 @@ class WebSocketChatManager:
     def _register_reminders_async(self, app, reminders, enhanced_query, main_loop):
         """リマインダーの非同期登録"""
         try:
+            if not hasattr(app, 'config') or app.config is None:
+                raise RuntimeError("アプリ設定が初期化されていません")
+
+            if not app.config.isEnableReminder:
+                logger.info("リマインダー機能は無効化されています。登録をスキップします。")
+                return
+
             # reminder_managerの存在確認を修正
             if not hasattr(app, 'reminder_manager') or app.reminder_manager is None:
                 logger.warning("リマインダーマネージャーが利用できません - リマインダー登録をスキップします")
