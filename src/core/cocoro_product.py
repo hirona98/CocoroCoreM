@@ -310,6 +310,7 @@ class CocoroProductWrapper:
         llm_model = current_character.llmModel if current_character and current_character.llmModel else "gpt-4o-mini"
         
         # 最小限のconfig.jsonを作成（MemOSの標準フロー）
+        # 一部setting.jsonと二重管理になるが起動の為やむを得ない
         import json
         
         # Neo4j設定を取得（Community Edition対応）
