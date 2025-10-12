@@ -5,6 +5,7 @@ MemOS MOSProductのラッパークラス実装
 """
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -194,6 +195,71 @@ class CocoroProductWrapper:
         
         logger.warning(f"UUID '{target_uuid}' にマッチするファイルが見つかりませんでした")
         return None
+
+    def _build_internet_retriever_config(self) -> Optional[dict]:
+        """Setting.jsonからインターネット検索設定を構築"""
+        if not self.cocoro_config.enable_internet_retrieval:
+            return None
+
+        api_key = (self.cocoro_config.googleApiKey or "").strip()
+        search_engine_id = (self.cocoro_config.googleSearchEngineId or "").strip()
+        if not api_key or not search_engine_id:
+            logger.warning("インターネット検索が有効ですがAPIキーまたは検索エンジンIDが未設定です")
+            return None
+
+        max_results = max(1, int(self.cocoro_config.internetMaxResults))
+        num_per_request = max(1, min(10, max_results))
+
+        return {
+            "backend": "google",
+            "config": {
+                "api_key": api_key,
+                "search_engine_id": search_engine_id,
+                "max_results": max_results,
+                "num_per_request": num_per_request,
+            },
+        }
+
+    def _ensure_cube_config_internet_settings(self, cube_dir: Path) -> None:
+        """既存キューブのconfig.jsonにインターネット検索設定を反映"""
+        internet_config = self._build_internet_retriever_config()
+
+        config_path = cube_dir / "config.json"
+        if not config_path.exists():
+            logger.warning(f"config.jsonが見つからないためインターネット設定を更新できません: {config_path}")
+            return
+
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                config_data = json.load(f)
+
+            text_mem_config = (
+                config_data.get("text_mem", {}).get("config")
+                if isinstance(config_data.get("text_mem"), dict)
+                else None
+            )
+            if text_mem_config is None:
+                logger.warning(f"text_mem設定が取得できずインターネット設定を反映できません: {config_path}")
+                return
+
+            if internet_config is None:
+                if text_mem_config.pop("internet_retriever", None) is not None:
+                    with open(config_path, "w", encoding="utf-8") as f:
+                        json.dump(config_data, f, indent=2, ensure_ascii=False)
+                    logger.info(f"インターネット検索設定をconfig.jsonから削除しました: {config_path}")
+                return
+
+            if text_mem_config.get("internet_retriever") == internet_config:
+                return
+
+            text_mem_config["internet_retriever"] = internet_config
+
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(config_data, f, indent=2, ensure_ascii=False)
+
+            logger.info(f"インターネット検索設定をconfig.jsonに反映しました: {config_path}")
+        except Exception as exc:
+            logger.warning(f"config.jsonのインターネット設定更新に失敗しました: {exc}")
     
     async def initialize(self):
         """非同期初期化処理"""
@@ -259,6 +325,9 @@ class CocoroProductWrapper:
                 else:
                     existing_absolute_path = existing_path
                 
+                if existing_absolute_path:
+                    self._ensure_cube_config_internet_settings(Path(existing_absolute_path))
+
                 # MemOSの内部権限システムで正しく関連付けられるように再登録
                 self.mos_product.register_mem_cube(
                     mem_cube_name_or_path_or_object=existing_absolute_path,
@@ -327,44 +396,50 @@ class CocoroProductWrapper:
             "embedding_dimension": current_character.embeddedDimension  # 設定ファイルから取得
         }
         
+        text_mem_config = {
+            "cube_id": self.current_cube_id,
+            "extractor_llm": {
+                "backend": "openai",
+                "config": {
+                    "model_name_or_path": llm_model,
+                    "api_key": api_key,
+                    "api_base": "https://api.openai.com/v1"
+                }
+            },
+            "dispatcher_llm": {
+                "backend": "openai",
+                "config": {
+                    "model_name_or_path": llm_model,
+                    "api_key": api_key,
+                    "api_base": "https://api.openai.com/v1"
+                }
+            },
+            "graph_db": {
+                "backend": "neo4j",
+                "config": neo4j_config
+            },
+            "embedder": {
+                "backend": "universal_api",
+                "config": {
+                    "model_name_or_path": "text-embedding-3-small",
+                    "provider": "openai",
+                    "api_key": api_key,
+                    "base_url": "https://api.openai.com/v1"
+                }
+            }
+        }
+
+        internet_config = self._build_internet_retriever_config()
+        if internet_config:
+            text_mem_config["internet_retriever"] = internet_config
+
         config_data = {
             "model_schema": "memos.configs.mem_cube.GeneralMemCubeConfig",
             "user_id": self.current_user_id,
             "cube_id": self.current_cube_id,
             "text_mem": {
                 "backend": "tree_text",
-                "config": {
-                    "cube_id": self.current_cube_id,
-                    "extractor_llm": {
-                        "backend": "openai",
-                        "config": {
-                            "model_name_or_path": llm_model,
-                            "api_key": api_key,
-                            "api_base": "https://api.openai.com/v1"
-                        }
-                    },
-                    "dispatcher_llm": {
-                        "backend": "openai",
-                        "config": {
-                            "model_name_or_path": llm_model,
-                            "api_key": api_key,
-                            "api_base": "https://api.openai.com/v1"
-                        }
-                    },
-                    "graph_db": {
-                        "backend": "neo4j",
-                        "config": neo4j_config
-                    },
-                    "embedder": {
-                        "backend": "universal_api",
-                        "config": {
-                            "model_name_or_path": "text-embedding-3-small",
-                            "provider": "openai",
-                            "api_key": api_key,
-                            "base_url": "https://api.openai.com/v1"
-                        }
-                    }
-                }
+                "config": text_mem_config
             },
             "act_mem": {
                 "backend": "uninitialized",

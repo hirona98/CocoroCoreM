@@ -189,7 +189,7 @@ class WebSocketChatManager:
             query=enhanced_query,
             user_id=current_user_id,
             cube_id=cube_id,
-            internet_search=request_data.get("internet_search", False)
+            internet_search=True # 起動時はTrue
         ):
             chunk_count += 1
 

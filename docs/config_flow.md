@@ -8,12 +8,13 @@
 ## キューブ新規作成 (`_create_cube`)
 - `UserDataM/Memory/cubes/<cube_id>/` を作成。`cube_id` は `<memoryId>_<memoryId>_cube`。
 - キャラクター設定から LLM/Embedding/Neo4j 情報を取得し、MemOS が要求する最小構成の `config.json` を生成。
+- `enable_internet_retrieval` が有効かつ Google API 情報が揃っている場合は、`text_mem.config.internet_retriever` に Google Custom Search 設定を埋め込む。無効の場合は該当設定を削除して `config.json` からインターネット検索を外す。
 - `register_mem_cube()` を呼び出し、MemOS 標準の初期化を通して `config.json` の内容で `MemCube` を構築。
 - MemOS 初期化後に `CocoroMOSProduct` 側の LiteLLM インテグレーションが走り、MemCube 内の LLM/Embedder/dispatcher_llm が LiteLLM に差し替わる。
 
 ## 既存キューブ再利用 (`_setup_current_character_cube`)
 - `memos_users.db` からキューブ一覧を取得し、対象の `cube_id` が存在すれば `register_mem_cube()` を再実行。
-- 既存 `config.json` を読み込み直し、LiteLLM 差し替えを再適用。
+- 既存 `config.json` を読み込み直し、LiteLLM 差し替えを再適用。インターネット検索が無効化されていれば `config.json` から `internet_retriever` を取り除く。
 - `cube_path` が欠落している場合のみ `_create_cube()` を再実行して再生成。
 
 ## 次回起動時の挙動
