@@ -8,22 +8,28 @@
 ## キューブ新規作成 (`_create_cube`)
 - `UserDataM/Memory/cubes/<cube_id>/` を作成。`cube_id` は `<memoryId>_<memoryId>_cube`。
 - キャラクター設定から LLM/Embedding/Neo4j 情報を取得し、MemOS が要求する最小構成の `config.json` を生成。
-- `enable_internet_retrieval` が有効かつ Google API 情報が揃っている場合は、`text_mem.config.internet_retriever` に Google Custom Search 設定を埋め込む。無効の場合は該当設定を削除して `config.json` からインターネット検索を外す。
+- `enable_internet_retrieval` が有効かつ Google API 情報が揃っている場合は、`text_mem.config.internet_retriever` に Google Custom Search 設定を埋め込む。無効の場合は該当設定を含めず、キューブ作成直後の `config.json` にはインターネット検索が含まれない。
 - `register_mem_cube()` を呼び出し、MemOS 標準の初期化を通して `config.json` の内容で `MemCube` を構築。
 - MemOS 初期化後に `CocoroMOSProduct` 側の LiteLLM インテグレーションが走り、MemCube 内の LLM/Embedder/dispatcher_llm が LiteLLM に差し替わる。
 
 ## 既存キューブ再利用 (`_setup_current_character_cube`)
 - `memos_users.db` からキューブ一覧を取得し、対象の `cube_id` が存在すれば `register_mem_cube()` を再実行。
-- 既存 `config.json` を読み込み直し、LiteLLM 差し替えを再適用。インターネット検索が無効化されていれば `config.json` から `internet_retriever` を取り除く。
+- 既存 `config.json` を読み込み直し、LiteLLM 差し替えを再適用。起動時点では `config.json` のインターネット設定を編集しない。
 - `cube_path` が欠落している場合のみ `_create_cube()` を再実行して再生成。
 
 ## 次回起動時の挙動
 - `Setting.json` を再読込して `CocoroAIConfig` を再構築する点は同じ。
 - 既存キューブがある場合は `config.json` 再生成は行わず、再度 `register_mem_cube()` で読み込み → LiteLLM 差し替え。
-- `Setting.json` を変更した場合、再起動で LiteLLM 設定は更新されるが、既存 `config.json` は自動更新されない。
+- インターネット検索設定はアプリ終了時に `config.json` へ反映されるため、次回起動時には既に最新設定が書き込まれている。
+
+## シャットダウン時の同期
+- アプリ終了処理（`core/cocoro_product.py` の `CocoroProductWrapper.shutdown()`）で、現在のユーザーが所有する全キューブの `config.json` を巡回。
+- `enable_internet_retrieval` / Google API 情報に基づき `text_mem.config.internet_retriever` を追加または削除し、`Setting.json` の内容と一致させる。
+- 設定が外部ツールで変更された場合でも、シャットダウン時に同期しておけば次回起動時に反映済みの状態から読み込める。
 
 ## `config.json` が変わるケース
-- `_create_cube()` が呼ばれた時のみ新規生成。
+- `_create_cube()` が呼ばれた時（新規生成）。
+- アプリ終了時の同期処理で `internet_retriever` 設定が現在の `Setting.json` と異なる場合。
 - `delete_character_memories()` でキューブを削除するとフォルダごと消えるため、次回起動で再生成が走る。
 
 ## LiteLLM 差し替え (`core/cocoro_mos_product.py`)

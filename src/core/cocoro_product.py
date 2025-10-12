@@ -260,6 +260,32 @@ class CocoroProductWrapper:
             logger.info(f"インターネット検索設定をconfig.jsonに反映しました: {config_path}")
         except Exception as exc:
             logger.warning(f"config.jsonのインターネット設定更新に失敗しました: {exc}")
+
+    def _sync_user_cube_configs(self) -> None:
+        """現在のユーザーに紐づく全キューブのconfig.jsonを最新設定に合わせる"""
+        if not self.current_user_id:
+            return
+
+        if not getattr(self, "mos_product", None):
+            return
+
+        try:
+            cubes = self.mos_product.user_manager.get_user_cubes(self.current_user_id)
+        except Exception as exc:
+            logger.warning(f"キューブ一覧の取得に失敗したためconfig同期をスキップします: {exc}")
+            return
+
+        for cube in cubes:
+            cube_path = getattr(cube, "cube_path", None)
+            if not cube_path:
+                continue
+
+            path_obj = Path(cube_path)
+            if not path_obj.is_absolute():
+                path_obj = Path.cwd() / path_obj
+
+            if path_obj.exists():
+                self._ensure_cube_config_internet_settings(path_obj)
     
     async def initialize(self):
         """非同期初期化処理"""
@@ -325,9 +351,6 @@ class CocoroProductWrapper:
                 else:
                     existing_absolute_path = existing_path
                 
-                if existing_absolute_path:
-                    self._ensure_cube_config_internet_settings(Path(existing_absolute_path))
-
                 # MemOSの内部権限システムで正しく関連付けられるように再登録
                 self.mos_product.register_mem_cube(
                     mem_cube_name_or_path_or_object=existing_absolute_path,
@@ -708,6 +731,9 @@ class CocoroProductWrapper:
         try:
             logger.info("CocoroProductWrapperシャットダウン開始")
             
+            # 最新の設定内容で各MemCubeのconfig.jsonを同期
+            self._sync_user_cube_configs()
+
             # MemOS公式シャットダウン手順（非同期実行）
             # メモリスケジューラー停止
             if hasattr(self.mos_product, 'mem_scheduler_off'):
