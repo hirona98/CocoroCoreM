@@ -242,6 +242,9 @@ class CocoroMOSProduct(MOSProduct):
             
             logger.info(f"🔄 LiteLLM Embedder統合完了: {replaced_count}個のMemCubeで置き換え完了")
             
+            # インターネット検索リトリーバーをLiteLLMEmbedderに統一
+            self._replace_internet_retriever_embedder()
+            
         except Exception as e:
             logger.error(f"❌ LiteLLM Embedder統合失敗: {e}")
             # Embedder置き換え失敗は非致命的（LLMは動作する）
@@ -530,6 +533,9 @@ class CocoroMOSProduct(MOSProduct):
         if hasattr(self, 'chat_llm') and hasattr(self.chat_llm, '__class__') and 'LiteLLMWrapper' in str(self.chat_llm.__class__):
             self._replace_new_memcube_tree_text_memory()
 
+        if hasattr(self, '_litellm_embedder') and self._litellm_embedder is not None:
+            self._replace_internet_retriever_embedder()
+
         return result
     
     def _replace_new_memcube_embedder(self):
@@ -600,6 +606,35 @@ class CocoroMOSProduct(MOSProduct):
         except Exception as e:
             logger.error(f"❌ 新規MemCube TreeTextMemory dispatcher_llm置き換え失敗: {e}")
             logger.warning("新しいMemCubeでTreeTextMemory機能に問題がありますが、他の機能は正常に動作します")
+
+    def _replace_internet_retriever_embedder(self) -> None:
+        """MemCubeに紐づくインターネット検索リトリーバーのembedderをLiteLLMに統一する"""
+        if not hasattr(self, '_litellm_embedder') or self._litellm_embedder is None:
+            raise RuntimeError("LiteLLMEmbedderが初期化されていないためインターネット検索を利用できません")
+
+        replaced_count = 0
+        for cube_id, mem_cube in self.mem_cubes.items():
+            text_mem = getattr(mem_cube, "text_mem", None)
+            if text_mem is None:
+                continue
+
+            internet_retriever = getattr(text_mem, "internet_retriever", None)
+            if internet_retriever is None:
+                continue
+
+            if not hasattr(internet_retriever, "embedder"):
+                raise RuntimeError(f"MemCube '{cube_id}' のinternet_retrieverにembedderが存在しません")
+
+            current_embedder = internet_retriever.embedder
+            if current_embedder is self._litellm_embedder:
+                continue
+
+            internet_retriever.embedder = self._litellm_embedder
+            replaced_count += 1
+            logger.info(f"🔄 MemCube {cube_id} のinternet_retriever.embedderをLiteLLMに置き換え完了")
+
+        if replaced_count > 0:
+            logger.info(f"✅ インターネット検索リトリーバーのembedder置き換え完了: {replaced_count}件")
 
     def _build_enhance_system_prompt(
         self, user_id: str, memories_all: List[TextualMemoryItem]
