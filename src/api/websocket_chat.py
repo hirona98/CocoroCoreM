@@ -605,7 +605,13 @@ class WebSocketChatManager:
                         )
                         logger.info(f"画像付き通知処理完了: 説明生成成功")
                         return enhanced_query
-                    
+
+                    # 画像付きDirectRequestの場合
+                    if chat_type == "direct":
+                        enhanced_query = self._format_image_context_for_chat(image_description, base_query)
+                        logger.info(f"画像付きDirectRequest処理完了: 説明生成成功")
+                        return enhanced_query
+
                     # 画像付きチャット
                     enhanced_query = self._format_image_context_for_chat(image_description, base_query)
                     logger.info(f"画像処理完了: 説明生成成功")
@@ -633,7 +639,13 @@ class WebSocketChatManager:
             original_msg = notification.get('original_message', '')
             # 画像なし通知：直接プロンプト構築
             return self._build_notification_prompt(source, original_msg)
-        
+
+        # DirectRequestの場合
+        if chat_type == "direct":
+            # DirectRequestは通常チャットと同じ処理だが、ログで識別可能にする
+            logger.info(f"DirectRequest処理: query={base_query[:50]}...")
+            return base_query
+
         # リマインダーの場合
         if chat_type == "reminder" and request_data.get("reminder"):
             reminder = request_data["reminder"]
@@ -641,7 +653,7 @@ class WebSocketChatManager:
             triggered_at = reminder.get('triggered_at', '')
             # リマインダー専用プロンプト構築
             return self._build_reminder_prompt(reminder_requirement, triggered_at)
-        
+
         # 通常チャット
         logger.info(f"通常チャット")
         return base_query
@@ -653,7 +665,11 @@ class WebSocketChatManager:
             source = notification.get('original_source', '不明なアプリ')
             original_msg = notification.get('original_message', '')
             return self._build_notification_prompt(source, original_msg) + error_msg
-        
+
+        if chat_type == "direct":
+            # DirectRequestの場合は通常チャットと同じ処理
+            return base_query + error_msg
+
         return base_query + error_msg
     
     def _build_notification_prompt(self, notification_source: str, original_message: str) -> str:
