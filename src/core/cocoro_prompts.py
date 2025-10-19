@@ -50,8 +50,6 @@ def get_cocoro_reminder_instruction():
 
 形式: [REMINDER:YYYY-MM-DD HH:MM:SS|要件]
 
-現在日時: {current_time}
-
 ### 実例
 
 **例1**: 時刻のみ指定

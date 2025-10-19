@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import uuid
+from datetime import datetime
 from asyncio import Queue
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Optional, Any
@@ -579,6 +580,10 @@ class WebSocketChatManager:
     async def _build_enhanced_query(self, request_data: dict, app) -> str:
         """画像処理と拡張クエリ構築（非同期）"""
         base_query = request_data.get("query", "")
+        now = datetime.now()
+        weekday_names = ("月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日")
+        timestamp = f"{now.strftime('%Y-%m-%d %H:%M:%S')} {weekday_names[now.weekday()]}"
+        base_query = f"\n\n現在日時: {timestamp}\n\n{base_query}"
         chat_type = request_data.get("chat_type", "text")
         images = request_data.get("images")
         
