@@ -6,13 +6,16 @@ CocoroCoreM Neo4j管理システム
 
 import asyncio
 import logging
+import locale
 import os
 import platform
 import sys
 import signal
 import socket
 import subprocess
+import threading
 import time
+from collections import deque
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -51,6 +54,8 @@ class Neo4jManager:
         self.config = config
         self.logger = logger
         self.process: Optional[subprocess.Popen] = None
+        self._stdout_thread: Optional[threading.Thread] = None
+        self._stdout_buffer = deque(maxlen=200)
         self.is_running = False
         self.startup_timeout = 60  # 1分
         
@@ -72,6 +77,7 @@ class Neo4jManager:
         self.uri = config.get("uri", "bolt://127.0.0.1:55603")
         self.web_port = config.get("web_port", 55606)
         self.embedded_enabled = config.get("embedded_enabled", True)
+        self.console_verbose = config.get("verbose", False)
         
         # ポート番号を抽出
         if ":" in self.uri:
@@ -89,12 +95,19 @@ class Neo4jManager:
             self.uri = fresh_config.get("uri", "bolt://127.0.0.1:55603")
             self.web_port = fresh_config.get("web_port", 55606)
             self.embedded_enabled = fresh_config.get("embedded_enabled", True)
+            self.console_verbose = fresh_config.get("verbose", False)
             
             # ポート番号を抽出
             if ":" in self.uri:
                 self.bolt_port = int(self.uri.split(":")[-1])
             else:
                 self.bolt_port = 7687
+            
+            self.logger.debug(
+                f"Setting.json再読み込み完了: uri={self.uri}, web_port={self.web_port}, "
+                f"embedded_enabled={self.embedded_enabled}, bolt_port={self.bolt_port}, "
+                f"verbose={self.console_verbose}"
+            )
                 
             return True
             
@@ -110,6 +123,8 @@ class Neo4jManager:
                 self.logger.error(f"Neo4j設定ファイルが見つかりません: {config_path}")
                 return False
             
+            self.logger.debug(f"Neo4j設定ファイル更新開始: {config_path}")
+            
             # 現在の設定を読み込み
             with open(config_path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -123,6 +138,9 @@ class Neo4jManager:
             if (expected_bolt in content and 
                 expected_http in content and 
                 expected_http_enabled in content):
+                self.logger.debug(
+                    f"Neo4j設定は既に最新: bolt={self.bolt_port}, http={self.web_port}"
+                )
                 return True
             
             # 設定を更新
@@ -147,6 +165,7 @@ class Neo4jManager:
                 f.write('\n'.join(updated_lines) + '\n')
             
             self.logger.info(f"Neo4j設定更新: Bolt={self.bolt_port}, HTTP={self.web_port}")
+            self.logger.debug("Neo4j設定ファイルの書き換えが完了しました")
             return True
             
         except Exception as e:
@@ -156,6 +175,7 @@ class Neo4jManager:
     def _check_ports_available(self) -> bool:
         """Neo4j使用ポートの利用可能性を確認"""
         ports_to_check = [self.bolt_port, self.web_port]
+        self.logger.debug(f"Neo4jポート確認開始: {ports_to_check}")
         
         for port in ports_to_check:
             try:
@@ -165,11 +185,48 @@ class Neo4jManager:
                     if result == 0:  # 接続成功 = ポート使用中
                         self.logger.error(f"ポート {port} は既に使用中です")
                         return False
+                    self.logger.debug(f"ポート {port} は空き状態です")
             except Exception as e:
                 self.logger.warning(f"ポート {port} の確認に失敗: {e}")
                 # エラー時は起動を試行（ネットワーク設定などの問題の可能性）
         
         return True
+    
+    def _start_stdout_reader(self) -> None:
+        """Neo4j起動プロセスの標準出力を取り込む"""
+        if not self.process or not self.process.stdout:
+            return
+        
+        if self._stdout_thread and self._stdout_thread.is_alive():
+            return
+        
+        preferred_encoding = locale.getpreferredencoding(False) or "utf-8"
+        
+        def _reader():
+            for raw_line in iter(self.process.stdout.readline, b''):
+                try:
+                    line = raw_line.decode(preferred_encoding, errors='replace').rstrip()
+                except Exception:
+                    line = raw_line.decode('utf-8', errors='replace').rstrip()
+                if line:
+                    self._stdout_buffer.append(line)
+                    self.logger.debug(f"[Neo4j STDOUT] {line}")
+        
+        self._stdout_thread = threading.Thread(
+            target=_reader,
+            name="Neo4jStdoutReader",
+            daemon=True,
+        )
+        self._stdout_thread.start()
+    
+    def _log_recent_stdout(self, message: str, level: int = logging.ERROR) -> None:
+        """Neo4jの最新標準出力をまとめて出力"""
+        if not self._stdout_buffer:
+            self.logger.log(level, f"{message}（Neo4j標準出力は空です）")
+            return
+        
+        joined = "\n".join(self._stdout_buffer)
+        self.logger.log(level, f"{message}\n--- Neo4j STDOUT (last {len(self._stdout_buffer)} lines) ---\n{joined}\n--- End of Neo4j STDOUT ---")
 
     async def start(self) -> bool:
         """
@@ -178,6 +235,10 @@ class Neo4jManager:
         Returns:
             bool: 起動成功したかどうか
         """
+        self.logger.debug(
+            f"Neo4j起動処理開始: embedded_enabled={self.embedded_enabled}, "
+            f"bolt_port={self.bolt_port}, web_port={self.web_port}"
+        )
         if not self.embedded_enabled:
             self.logger.info("組み込みNeo4jが無効になっています")
             return True
@@ -188,24 +249,29 @@ class Neo4jManager:
         
         try:
             # 1. 残留java.exeプロセス確認・終了
+            self.logger.debug("Neo4j起動ステップ1: java.exeプロセス整理を開始")
             await self._cleanup_java_processes()
             
             # 2. 最新のSetting.json設定を再読み込み
+            self.logger.debug("Neo4j起動ステップ2: Setting.jsonを再読み込み")
             if not self._reload_config():
                 self.logger.error("Setting.jsonの再読み込みに失敗しました")
                 return False
             
             # 3. Neo4j実行ファイルの存在確認
+            self.logger.debug(f"Neo4j起動ステップ3: 実行ファイル確認 {self.neo4j_executable}")
             if not self.neo4j_executable.exists():
                 self.logger.error(f"Neo4j実行ファイルが見つかりません: {self.neo4j_executable}")
                 return False
             
             # 4. Neo4j設定ファイル更新（最新の設定で）
+            self.logger.debug("Neo4j起動ステップ4: Neo4j設定ファイルを更新")
             if not self._update_neo4j_config():
                 self.logger.error("Neo4j設定ファイルの更新に失敗しました")
                 return False
 
             # 5. ポート利用可能性確認
+            self.logger.debug("Neo4j起動ステップ5: ポート利用状況を確認")
             if not self._check_ports_available():
                 self.logger.error(f"Neo4j起動に必要なポート（Bolt: {self.bolt_port}, HTTP: {self.web_port}）が使用中です。他のアプリケーションまたは前回のNeo4jプロセスが残っている可能性があります。")
                 return False
@@ -223,6 +289,15 @@ class Neo4jManager:
             
             # Neo4j起動
             console_cmd = [str(self.neo4j_executable), "console"]
+            if self.console_verbose:
+                console_cmd.append("--verbose")
+                self.logger.debug("Neo4j起動オプション: --verbose を付与しました")
+            self.logger.debug(f"Neo4j起動ステップ6: コマンド={console_cmd}, 作業ディレクトリ={self.neo4j_dir}")
+            self.logger.debug(
+                f"Neo4j起動環境: JAVA_HOME={java_home}, NEO4J_HOME={self.neo4j_dir}, "
+                f"NEO4J_CONF={self.neo4j_dir / 'conf'}"
+            )
+            self._stdout_buffer.clear()
             
             self.process = subprocess.Popen(
                 console_cmd,
@@ -233,8 +308,10 @@ class Neo4jManager:
                 text=False,
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
             )
+            self._start_stdout_reader()
             
             # 起動待ち
+            self.logger.debug("Neo4j起動ステップ7: 起動完了待機を開始")
             if await self._wait_for_startup():
                 self.is_running = True
                 self.logger.info(f"Neo4j起動完了 (PID: {self.process.pid})")
@@ -247,20 +324,24 @@ class Neo4jManager:
         except Exception as e:
             self.logger.error(f"Neo4j起動エラー: {e}")
             await self.stop()
+            self._log_recent_stdout("Neo4j標準出力ダイジェスト（起動例外時）")
             return False
     
     async def _wait_for_startup(self) -> bool:
         """起動完了を待つ"""
         start_time = time.time()
         attempt = 0
+        self.logger.debug(f"Neo4j起動監視を開始: タイムアウト={self.startup_timeout}秒")
         
         while time.time() - start_time < self.startup_timeout:
             if self.process and self.process.poll() is not None:
                 # プロセスが終了している
                 self.logger.error(f"Neo4jプロセスが異常終了しました (終了コード: {self.process.returncode})")
+                self._log_recent_stdout("Neo4j標準出力ダイジェスト（異常終了検知時）")
                 return False
             
             # 接続テスト
+            self.logger.debug(f"Neo4j起動監視: 接続テスト試行 {attempt + 1}")
             if await self._test_connection():
                 self.logger.info(f"Neo4j接続成功 (試行回数: {attempt + 1}, 経過時間: {time.time() - start_time:.1f}秒)")
                 return True
@@ -269,13 +350,17 @@ class Neo4jManager:
             await asyncio.sleep(0.5)
             attempt += 1
         
+        self.logger.error(f"Neo4j起動がタイムアウトしました（タイムアウト: {self.startup_timeout}秒）")
+        self._log_recent_stdout("Neo4j標準出力ダイジェスト（起動タイムアウト）")
         return False
     
     async def _test_connection(self) -> bool:
         """Neo4j接続テスト（遅延インポート対応）"""
         # Neo4jドライバーの遅延インポート
+        self.logger.debug(f"Neo4j接続テスト開始: uri={self.uri}")
         driver_available, GraphDatabase = _ensure_neo4j_driver()
         if not driver_available:
+            self.logger.debug("Neo4jドライバーが未導入のため接続テストを実行できません")
             return False
             
         try:
@@ -288,7 +373,12 @@ class Neo4jManager:
                 test_driver.close()
                 return success
 
-            return await asyncio.get_event_loop().run_in_executor(None, _test_driver)
+            success = await asyncio.get_event_loop().run_in_executor(None, _test_driver)
+            if success:
+                self.logger.debug("Neo4j接続テスト成功")
+            else:
+                self.logger.debug("Neo4j接続テスト失敗（レスポンス異常）")
+            return success
                 
         except Exception as e:
             self.logger.debug(f"Neo4j接続テスト失敗: {e}")
@@ -317,17 +407,26 @@ class Neo4jManager:
         except Exception as e:
             self.logger.error(f"Neo4j停止エラー: {e}")
         
+        if self.process and self.process.stdout:
+            try:
+                self.process.stdout.close()
+            except Exception as e:
+                self.logger.debug(f"Neo4j標準出力クローズ時に警告: {e}")
+        
         self.process = None
+        self._stdout_thread = None
         self.is_running = False
     
     async def _cleanup_java_processes(self):
         """CocoroCoreMのjreを使用するjava.exeプロセスのみを終了"""
         try:
+            self.logger.debug("Neo4j起動前クリーンアップ: java.exeプロセス確認を開始")
             # CocoroCoreMのjreディレクトリパス
             java_home = str(self.base_dir / "jre")
             
             # wmicでjava.exeプロセスの情報を取得
             cmd = 'wmic process where "name=\'java.exe\'" get processid,commandline /format:csv'
+            self.logger.debug(f"Neo4j起動前クリーンアップ: wmicコマンド={cmd}")
             
             def run_wmic():
                 return subprocess.run(
@@ -375,6 +474,9 @@ class Neo4jManager:
                     continue
             
             # 対象プロセスを終了
+            if not target_pids:
+                self.logger.debug("CocoroCoreMのjava.exeプロセスは検出されませんでした")
+            
             for pid in target_pids:
                 try:
                     subprocess.run(

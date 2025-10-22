@@ -98,6 +98,7 @@ class CocoroAIConfig(BaseModel):
     cocoroMemoryWebPort: int = 55606
     cocoroShellPort: int = 55605
     isEnableMcp: bool = True
+    isEnableDebug: bool = Field(default=False, description="デバッグ機能を有効にする")
 
     # キャラクター設定
     currentCharacterIndex: int = 0
@@ -419,9 +420,15 @@ def load_neo4j_config() -> Dict[str, Any]:
         memory_db_port = setting_data.get("cocoroMemoryDBPort", 7687)
         memory_web_port = setting_data.get("cocoroMemoryWebPort", 55606)
         uri = f"bolt://127.0.0.1:{memory_db_port}"
+        debug_enabled = setting_data.get("isEnableDebug", False)
 
         # Neo4j設定辞書を作成
-        neo4j_config = {"uri": uri, "web_port": memory_web_port, "embedded_enabled": embedded_enabled}
+        neo4j_config = {
+            "uri": uri,
+            "web_port": memory_web_port,
+            "embedded_enabled": embedded_enabled,
+            "verbose": bool(debug_enabled),
+        }
 
     except Exception as e:
         raise ConfigurationError(f"Setting.jsonの処理に失敗しました: {e}")
