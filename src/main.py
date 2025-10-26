@@ -347,12 +347,19 @@ class CocoroCoreMApp:
             logger.info("MOSProduct統合システムを初期化しています...")
             
             try:
-                # MemOSのdictConfigを事前に無効化（インポート前）
+                # MemOSのdictConfig呼び出しをCocoroCore側へ委譲（インポート前）
                 import memos.log
-                def disabled_dictConfig(config):
-                    pass
-                memos.log.dictConfig = disabled_dictConfig
-                logger.info("MemOSのdictConfigを事前無効化しました")
+                def delegate_dict_config(config):
+                    # MemOS側がdictConfigを呼び出してきた場合でもCocoroCore側の設定を再適用する
+                    setup_logging()
+                memos.log.dictConfig = delegate_dict_config
+                logger.info("MemOSのdictConfigをCocoroCoreの設定適用に委譲しました")
+
+                # MemOSロガーをCocoroCoreのルートロガーへ直結
+                memos_root_logger = logging.getLogger("memos")
+                memos_root_logger.handlers.clear()
+                memos_root_logger.propagate = True
+                logger.info("MemOSロガーをCocoroCoreルートに連結しました")
 
                 # RabbitMQ初期化メソッドを無効化するシンプルなパッチ
                 import memos.mem_scheduler.webservice_modules.rabbitmq_service
