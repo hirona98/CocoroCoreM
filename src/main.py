@@ -159,6 +159,9 @@ def setup_logging():
     logging.getLogger("neo4j.io").setLevel(logging.INFO)
     logging.getLogger("neo4j.pool").setLevel(logging.INFO)
     logging.getLogger("neo4j.notifications").setLevel(logging.INFO)
+    
+    # asyncioログレベル設定
+    logging.getLogger("asyncio").setLevel(logging.INFO)
 
     # httpログレベル設定
     logging.getLogger("httpcore.http11").setLevel(logging.INFO)
@@ -172,6 +175,7 @@ def setup_logging():
 
     # MemOSスケジューラーのメインログレベル
     logging.getLogger("memos.mem_scheduler").setLevel(logging.WARN)
+    
     # MemOS dispatcher監視ログにフィルターを追加(memos.mem_schedulerに依存)
     dispatcher_logger = logging.getLogger("memos.mem_scheduler.monitors.dispatcher_monitor")
     dispatcher_logger.addFilter(DispatcherMonitorFilter())
