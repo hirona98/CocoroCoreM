@@ -50,6 +50,7 @@ class LiteLLMConfig:
             'o1-mini': {'reasoning_effort': 'low'},
             'o3-mini': {'reasoning_effort': 'low'},
 
+            'gpt-5.1': {'reasoning_effort': 'none'},
             'gpt-5': {'reasoning_effort': 'minimal'},
             'gpt-5-mini': {'reasoning_effort': 'minimal'},
             'gpt-5-nano': {'reasoning_effort': 'minimal'},
@@ -57,6 +58,7 @@ class LiteLLMConfig:
             'grok-3-mini': {'reasoning_effort': 'low'},
             'grok-3-mini-fast': {'reasoning_effort': 'low'},
             'grok-4': {'reasoning_effort': ''},
+            'grok-4-fast-non-reasoning': {'reasoning_effort': ''},
         }
         
         # モデル名から推論制御設定を検出・適用
