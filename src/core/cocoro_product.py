@@ -78,11 +78,21 @@ class CocoroProductWrapper:
             # 埋め込み用APIキーを直接使用
             embedding_api_key = current_character.get_embedded_api_key()
             
+            extra_config: Dict[str, Any] = {}
+            reasoning_effort = getattr(current_character, "reasoning_effort", "")
+            if isinstance(reasoning_effort, str):
+                reasoning_effort = reasoning_effort.strip()
+            else:
+                reasoning_effort = ""
+            if reasoning_effort:
+                extra_config["reasoning_effort"] = reasoning_effort
+                logger.info(f"🎯 reasoning_effort指定: {reasoning_effort}")
+
             litellm_config = {
                 'model': llm_model,
                 'api_key': api_key,
                 'max_tokens': current_character.max_tokens,
-                'extra_config': {},
+                'extra_config': extra_config,
                 'embedding_model': current_character.embeddedModel,
                 'embedding_api_key': embedding_api_key,
                 'embedding_base_url': current_character.get_embedded_base_url()

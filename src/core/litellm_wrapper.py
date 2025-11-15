@@ -37,6 +37,13 @@ class LiteLLMConfig:
         
     def _configure_reasoning_control(self):
         """推論モデル用のthinking制御設定"""
+        # ユーザーがreasoning_effortを指定している場合は優先して適用
+        user_reasoning = (self.extra_config.get('reasoning_effort') or "").strip()
+        if user_reasoning:
+            self.extra_config['reasoning_effort'] = user_reasoning
+            logger.info(f"ユーザー指定reasoning_effortを適用: {user_reasoning}")
+            return
+
         # Note: {'reasoning_effort': ''} のような無効な値は
         # _prepare_completion_params で動的に処理され、drop_paramsが有効化される
         reasoning_models = {

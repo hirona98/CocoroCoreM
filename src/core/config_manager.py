@@ -26,6 +26,7 @@ class CharacterData(BaseModel):
     isUseLLM: bool = False
     apiKey: str = ""
     llmModel: str = ""
+    reasoning_effort: str = Field(default="", description="LiteLLMのreasoning_effortを上書きする場合に使用")
     # 画像分析用設定
     visionModel: str = ""  # 画像分析用モデル
     visionApiKey: str = ""  # 画像分析用APIキー（空ならapiKeyを使用）
