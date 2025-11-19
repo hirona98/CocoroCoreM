@@ -224,7 +224,7 @@ class WebSocketChatManager:
                 # 会話履歴を即座に更新（一度だけ）
                 if not history_updated and full_response.strip():
                     self._update_chat_history_immediately(
-                        app, enhanced_query, full_response, current_user_id, session_id, main_loop
+                        app, enhanced_query, full_response, current_user_id, session_id, main_loop, request_data
                     )
                     history_updated = True
 
@@ -232,7 +232,7 @@ class WebSocketChatManager:
 
         return full_response, current_user_id, history_updated
     
-    def _update_chat_history_immediately(self, app, enhanced_query, full_response, current_user_id, session_id, main_loop):
+    def _update_chat_history_immediately(self, app, enhanced_query, full_response, current_user_id, session_id, main_loop, request_data=None):
         """会話履歴の即時更新とタグ処理"""
         try:
             if not full_response.strip():
@@ -247,7 +247,13 @@ class WebSocketChatManager:
             chat_history = app.cocoro_product.mos_product.chat_history_manager[user_id]
             
             # ユーザークエリを履歴に追加
-            chat_history.chat_history.append({"role": "user", "content": enhanced_query})
+            role = "user"
+            # システム指示として扱うタイプ
+            system_types = ["direct", "desktop_watch", "notification"]
+            if request_data and request_data.get("chat_type") in system_types:
+                role = "system"
+                
+            chat_history.chat_history.append({"role": role, "content": enhanced_query})
             
             # 応答から記憶参照タグとリマインダータグを除去
             memory_cleaned_response = self._remove_memory_references(full_response.strip())
@@ -484,7 +490,7 @@ class WebSocketChatManager:
                     # 履歴がまだ更新されていない場合のみ更新（フォールバック）
                     if not history_updated and full_response.strip():
                         self._update_chat_history_immediately(
-                            app, enhanced_query, full_response, current_user_id, session_id, main_loop
+                            app, enhanced_query, full_response, current_user_id, session_id, main_loop, request_data
                         )
                         
                 except Exception as e:
@@ -598,7 +604,8 @@ class WebSocketChatManager:
                 if image_description:
                     # デスクトップウォッチの場合
                     if chat_type == "desktop_watch":
-                        return self._build_desktop_watch_prompt(image_description)
+                        prompt = self._build_desktop_watch_prompt(image_description)
+                        return f"【デスクトップ認識】\n{prompt}"
                     
                     # 画像付き通知の場合
                     if chat_type == "notification":
@@ -609,13 +616,13 @@ class WebSocketChatManager:
                             source, original_msg, image_description
                         )
                         logger.info(f"画像付き通知処理完了: 説明生成成功")
-                        return enhanced_query
+                        return f"【アプリ通知】\n{enhanced_query}"
 
                     # 画像付きDirectRequestの場合
                     if chat_type == "direct":
                         enhanced_query = self._format_image_context_for_chat(image_description, base_query)
                         logger.info(f"画像付きDirectRequest処理完了: 説明生成成功")
-                        return enhanced_query
+                        return f"【システム通知】\n{enhanced_query}"
 
                     # 画像付きチャット
                     enhanced_query = self._format_image_context_for_chat(image_description, base_query)
@@ -643,13 +650,14 @@ class WebSocketChatManager:
             source = notification.get('original_source', '不明なアプリ')
             original_msg = notification.get('original_message', '')
             # 画像なし通知：直接プロンプト構築
-            return self._build_notification_prompt(source, original_msg)
+            prompt = self._build_notification_prompt(source, original_msg)
+            return f"【アプリ通知】\n{prompt}"
 
         # DirectRequestの場合
         if chat_type == "direct":
-            # DirectRequestは通常チャットと同じ処理だが、ログで識別可能にする
+            # DirectRequestはシステム指示として扱うため、ヘッダーを付与
             logger.info(f"DirectRequest処理: query={base_query[:50]}...")
-            return base_query
+            return f"【システム通知】\n{base_query}"
 
         # リマインダーの場合
         if chat_type == "reminder" and request_data.get("reminder"):
