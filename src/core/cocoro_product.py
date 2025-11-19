@@ -12,6 +12,8 @@ import re
 from typing import AsyncIterator, Dict, List, Optional
 from pathlib import Path
 
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
 # MemOSインポート前にMOS_CUBE_PATH環境変数を設定（重要）
 def _setup_mos_cube_path():
     """MemOSのCUBE_PATHを設定（絶対パス使用でMemOS内部処理を確実に）"""
@@ -65,15 +67,18 @@ class CocoroProductWrapper:
         if current_character:
             # LLMモデル名を取得（既存のllmModelフィールドを使用）
             if not hasattr(current_character, 'llmModel') or not current_character.llmModel:
-                raise ValueError("❌ llmModelが設定されていません。Setting.jsonでllmModelを設定してください（例: 'openai/gpt-4o-mini'）")
+                raise ValueError("❌ LLMが設定されていません。CharacterタブのLLMを設定してください（例: 'openai/gpt-4o-mini'）")
             llm_model = current_character.llmModel
+            provider_prefix = llm_model.split('/')[0].lower() if '/' in llm_model else 'openai'
             
             # LLM用APIキーを直接使用
             api_key = current_character.get_api_key()
+            if provider_prefix == 'openrouter' and (not api_key or api_key == 'dummy-api-key'):
+                raise ValueError("❌ OpenRouterモデルを使用するには有効なOPENROUTER_API_KEYを設定してください。")
             
             # 埋め込みモデルとAPIキーの検証
             if not hasattr(current_character, 'embeddedModel') or not current_character.embeddedModel:
-                raise ValueError("❌ embeddedModelが設定されていません。Setting.jsonでembeddedModelを設定してください（例: 'openai/text-embedding-3-small'）")
+                raise ValueError("❌ 埋め込みモデルが設定されていません。Memoryタブの埋め込みモデルを設定してください（例: 'openai/text-embedding-3-large'）")
             
             # 埋め込み用APIキーを直接使用
             embedding_api_key = current_character.get_embedded_api_key()
@@ -98,10 +103,18 @@ class CocoroProductWrapper:
                 'embedding_base_url': current_character.get_embedded_base_url()
             }
             
-            # localLLMBaseUrlが設定されている場合は追加
+            # BaseURL設定（優先順位: キャラクター設定 > プロバイダー必須値）
+            base_url_override = ""
             if current_character.localLLMBaseUrl:
-                litellm_config['base_url'] = current_character.localLLMBaseUrl
+                base_url_override = current_character.localLLMBaseUrl
                 logger.info(f"🔧 ローカルLLM BaseURL設定: {current_character.localLLMBaseUrl}")
+            elif provider_prefix == 'openrouter':
+                base_url_override = OPENROUTER_BASE_URL
+                logger.info(f"🔧 OpenRouter BaseURL設定: {OPENROUTER_BASE_URL}")
+            
+            if base_url_override:
+                litellm_config['base_url'] = base_url_override
+                extra_config.setdefault('base_url', base_url_override)
             
             logger.info(f"🎯 LiteLLM設定: model={litellm_config['model']}")
             logger.info(f"🎯 Embedding設定: model={litellm_config['embedding_model']}")

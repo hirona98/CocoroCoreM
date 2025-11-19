@@ -47,10 +47,20 @@ class LiteLLMEmbedder(BaseEmbedder):
                 - provider: プロバイダー名（オプション、モデル名から自動推定）
                 - extra_config: 追加設定（オプション）
         """
+        # OpenRouter対応: モデル名からプレフィックスを除去し、base_urlを自動設定
+        model_name = config["model_name_or_path"]
+        base_url = config.get("base_url")
+        
+        if model_name.startswith("openrouter/"):
+            model_name = model_name.replace("openrouter/", "")
+            if not base_url:
+                base_url = "https://openrouter.ai/api/v1"
+                
         # LiteLLMConfig作成
         litellm_config = LiteLLMConfig(
-            model_name=config["model_name_or_path"],
+            model_name=model_name,
             api_key=config["api_key"],
+            base_url=base_url,
             extra_config=config.get("extra_config", {})
         )
         

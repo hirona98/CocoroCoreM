@@ -28,12 +28,24 @@ class LiteLLMConfig:
         self.remove_think_prefix = kwargs.get('remove_think_prefix', False)
         self.extra_config = extra_config or {}
         
-        
         # プロバイダー名を自動抽出（例: "xai/grok-2-latest" → "xai"）
-        self.provider = model_name.split('/')[0] if '/' in model_name else 'openai'
+        self.provider = model_name.split('/')[0].lower() if '/' in model_name else 'openai'
+        
+        # プロバイダー固有の必須設定
+        self._apply_provider_defaults()
         
         # 推論モデル用thinking制御設定を追加
         self._configure_reasoning_control()
+        
+    def _apply_provider_defaults(self):
+        """プロバイダー固有の必須設定を適用"""
+        if self.provider == 'openrouter':
+            openrouter_base_url = "https://openrouter.ai/api/v1"
+            if not self.base_url:
+                self.base_url = openrouter_base_url
+            effective_url = self.base_url or openrouter_base_url
+            self.extra_config.setdefault('base_url', effective_url)
+            logger.info(f"OpenRouter設定適用: base_url={effective_url}")
         
     def _configure_reasoning_control(self):
         """推論モデル用のthinking制御設定"""
@@ -157,7 +169,12 @@ class LiteLLMWrapper:
             "anthropic": "ANTHROPIC_API_KEY",
             "xai": "XAI_API_KEY",
             "gemini": "GEMINI_API_KEY",
+            "openrouter": "OPENROUTER_API_KEY",
         }
+
+        if provider == "openrouter":
+            if not api_key or api_key == "dummy-api-key":
+                raise ValueError("OpenRouterを使用するには有効なOPENROUTER_API_KEYを設定してください。")
 
         # 共通: APIキーの設定（存在する場合のみ）
         if provider in provider_key_env and api_key:
@@ -172,6 +189,11 @@ class LiteLLMWrapper:
             if "location" in extra:
                 os.environ["VERTEXAI_LOCATION"] = extra["location"]
             logger.info(f"   → VERTEX_AI 環境変数に設定")
+
+        if provider == "openrouter":
+            effective_base_url = base_url or "https://openrouter.ai/api/v1"
+            os.environ["OPENROUTER_BASE_URL"] = effective_base_url
+            logger.info(f"   → OPENROUTER_BASE_URL に設定 ({effective_base_url})")
 
         # LM Studio は per-call の base_url/api_base 指定で対応。環境変数は汚染しない。
         if provider == "lm_studio":
@@ -216,6 +238,10 @@ class LiteLLMWrapper:
                 params.setdefault('api_key', 'lm-studio')
             else:
                 params.setdefault('api_key', effective_key)
+        elif self.config.provider == "openrouter":
+            if not self.config.api_key or self.config.api_key == "dummy-api-key":
+                raise ValueError("OpenRouterを使用するには有効なOPENROUTER_API_KEYが必要です。")
+            params.setdefault('api_key', self.config.api_key)
         return params
     
     def generate(self, messages: List[Dict[str, str]], **kwargs) -> str:
