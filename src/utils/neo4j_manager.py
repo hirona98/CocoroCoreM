@@ -5,6 +5,7 @@ CocoroCoreM Neo4j管理システム
 """
 
 import asyncio
+import json
 import logging
 import locale
 import os
@@ -424,54 +425,45 @@ class Neo4jManager:
             # CocoroCoreMのjreディレクトリパス
             java_home = str(self.base_dir / "jre")
             
-            # wmicでjava.exeプロセスの情報を取得
-            cmd = 'wmic process where "name=\'java.exe\'" get processid,commandline /format:csv'
-            self.logger.debug(f"Neo4j起動前クリーンアップ: wmicコマンド={cmd}")
-            
-            def run_wmic():
+            # PowerShellでプロセス一覧を取得（wmic非推奨対応）
+            ps_command = (
+                "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; "
+                "Get-Process java -ErrorAction SilentlyContinue | "
+                f"Where-Object {{ $_.Path -and $_.Path -like '{java_home}*' }} | "
+                "Select-Object Id,Path | ConvertTo-Json -Compress"
+            )
+            self.logger.debug(f"Neo4j起動前クリーンアップ: PowerShellコマンド={ps_command}")
+
+            def run_powershell():
                 return subprocess.run(
-                    cmd, 
-                    shell=True, 
-                    capture_output=True, 
-                    text=False,  # バイナリモードで読み取り
-                    timeout=5
+                    ["powershell", "-NoProfile", "-Command", ps_command],
+                    capture_output=True,
+                    text=False,
+                    timeout=10
                 )
-            
-            result = await asyncio.get_event_loop().run_in_executor(None, run_wmic)
-            
+
+            result = await asyncio.get_event_loop().run_in_executor(None, run_powershell)
+
             if result.returncode != 0:
-                self.logger.error("wmicコマンド実行エラー")
+                self.logger.error("PowerShellによるJavaプロセス取得に失敗しました")
                 return
-            
-            # 出力をデコード
+
+            stdout_text = result.stdout.decode("utf-8", errors="replace")
             try:
-                stdout_text = result.stdout.decode('cp932', errors='replace')
-            except:
-                self.logger.error("wmicの出力をデコードできませんでした")
+                parsed = json.loads(stdout_text) if stdout_text.strip() else []
+            except json.JSONDecodeError as e:
+                self.logger.error(f"PowerShell出力のJSONデコードに失敗しました: {e}")
                 return
-            
-            # CSVの解析（ヘッダー行をスキップ）
-            lines = stdout_text.strip().split('\n')[1:]  # ヘッダーをスキップ
+
+            processes = parsed if isinstance(parsed, list) else [parsed]
             target_pids = []
-            
-            for line in lines:
-                if not line.strip():
-                    continue
-                
-                # CSV形式: Node,CommandLine,ProcessId
+            for proc in processes:
                 try:
-                    parts = line.split(',', 2)
-                    if len(parts) >= 3:
-                        command_line = parts[1].strip()
-                        pid_str = parts[2].strip()
-                        
-                        if java_home in command_line and pid_str.isdigit():
-                            target_pids.append(int(pid_str))
-                            self.logger.info(f"CocoroCoreMの残留java.exeプロセスを発見: PID {pid_str}")
-                
-                except (ValueError, IndexError) as e:
-                    self.logger.debug(f"wmicの行解析をスキップ: {line[:50]}... (エラー: {e})")
-                    continue
+                    pid = int(proc.get("Id"))
+                    target_pids.append(pid)
+                    self.logger.info(f"CocoroCoreMの残留java.exeプロセスを発見: PID {pid}")
+                except Exception as e:
+                    self.logger.debug(f"PowerShell出力の行解析をスキップ: {proc} (エラー: {e})")
             
             # 対象プロセスを終了
             if not target_pids:
