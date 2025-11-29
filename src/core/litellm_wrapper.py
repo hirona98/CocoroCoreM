@@ -241,6 +241,9 @@ class LiteLLMWrapper:
             params.setdefault("tools", [{"type": "x_search"}])
             params.setdefault("tool_choice", "auto")
             params.setdefault("custom_llm_provider", "xai")
+        elif self.config.provider == "xai" and self._use_xai_tools:
+            # ツール非許可でもxai-xモデルはcustom provider指定でエラーを回避
+            params.setdefault("custom_llm_provider", "xai")
         
         # reasoning_effortが空文字列の場合は削除してdrop_paramsを有効化
         if params.get('reasoning_effort') == '':
@@ -309,8 +312,9 @@ class LiteLLMWrapper:
             params.pop("tool_choice", None)
             params.pop("custom_llm_provider", None)
 
+            model_for_completion = self._get_completion_model_name()
             response = self.litellm.completion(
-                model=self.config.model_name_or_path,
+                model=model_for_completion,
                 messages=messages,
                 max_tokens=self.config.max_tokens,
                 **params
@@ -387,8 +391,9 @@ class LiteLLMWrapper:
             params.pop("tool_choice", None)
             params.pop("custom_llm_provider", None)
 
+            model_for_completion = self._get_completion_model_name()
             response = self.litellm.completion(
-                model=self.config.model_name_or_path,
+                model=model_for_completion,
                 messages=messages,
                 stream=True,  # ストリーミング有効
                 max_tokens=self.config.max_tokens,
@@ -603,3 +608,15 @@ class LiteLLMWrapper:
                             return text
 
         raise ValueError("xAI Responses APIレスポンスからテキストを抽出できませんでした")
+
+    def _get_completion_model_name(self) -> str:
+        """
+        LiteLLM completion呼び出し用にモデル名を正規化
+
+        xai-x/ プレフィックスはxAIツール利用を表す独自拡張のため、
+        LiteLLMには標準のxai/モデル名を渡す
+        """
+        model_name = self.config.model_name_or_path
+        if self.config.provider == "xai" and self._use_xai_tools and model_name.startswith("xai-x/"):
+            return "xai/" + model_name[len("xai-x/"):]
+        return model_name
