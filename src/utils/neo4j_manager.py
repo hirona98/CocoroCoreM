@@ -445,7 +445,7 @@ class Neo4jManager:
             result = await asyncio.get_event_loop().run_in_executor(None, run_powershell)
 
             if result.returncode != 0:
-                self.logger.error("PowerShellによるJavaプロセス取得に失敗しました")
+                # self.logger.error("PowerShellによるJavaプロセス取得に失敗しました")
                 return
 
             stdout_text = result.stdout.decode("utf-8", errors="replace")
