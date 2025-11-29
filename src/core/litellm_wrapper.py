@@ -8,7 +8,11 @@ LiteLLMを使用してマルチプロバイダーLLM対応を実現
 import logging
 import os
 from collections.abc import Generator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Dict, Any, List
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +110,7 @@ class LiteLLMWrapper:
         """
         self.config = config
         self.logger = logger
+        self._tools_allowed_ctx: ContextVar[bool] = ContextVar("litellm_tools_allowed", default=False)
         
         # 環境変数設定（プロバイダー別）
         self._setup_environment_variables()
@@ -121,31 +126,20 @@ class LiteLLMWrapper:
             logging.getLogger("LiteLLM").setLevel(logging.INFO)
             logging.getLogger("litellm").setLevel(logging.INFO)
             
-            # LiteLLMのログを切り詰めるためのカスタムハンドラー設定
+            # LiteLLMのログを切り詰めるためのカスタムフィルター設定
             litellm_logger = logging.getLogger("LiteLLM")
-            
-            # 既存のハンドラーを取得して切り詰め機能を追加
-            class TruncateLogHandler(logging.Handler):
-                def __init__(self, original_handlers):
-                    super().__init__()
-                    self.original_handlers = original_handlers
-                    
-                def emit(self, record):
+
+            # フィルターベースで切り詰め（再帰問題を回避）
+            class TruncateLogFilter(logging.Filter):
+                def filter(self, record):
                     if hasattr(record, 'msg') and isinstance(record.msg, str):
                         if len(record.msg) > 300:
                             record.msg = record.msg[:300] + "...[切り詰め]"
-                    
-                    # 元のハンドラーに転送
-                    for handler in self.original_handlers:
-                        if handler.level <= record.levelno:
-                            handler.emit(record)
-            
-            # カスタムハンドラーを適用
-            original_handlers = litellm_logger.handlers.copy()
-            if original_handlers:
-                litellm_logger.handlers.clear()
-                truncate_handler = TruncateLogHandler(original_handlers)
-                litellm_logger.addHandler(truncate_handler)
+                    return True
+
+            # 重複追加を防止
+            if not any(isinstance(f, TruncateLogFilter) for f in litellm_logger.filters):
+                litellm_logger.addFilter(TruncateLogFilter())
         except ImportError:
             raise RuntimeError("LiteLLMがインストールされていません。pip install litellm でインストールしてください。")
         
@@ -212,6 +206,12 @@ class LiteLLMWrapper:
         """
         # extra_configとkwargsをマージしてチェック
         params = {**self.config.extra_config, **kwargs}
+
+        # xAI利用時に明示的に許可された場合のみx_searchツールを付与（ContextVarで並行安全）
+        if self.config.provider == "xai" and self._tools_allowed_ctx.get():
+            params.setdefault("tools", [{"type": "x_search"}])
+            params.setdefault("tool_choice", "auto")
+            params.setdefault("custom_llm_provider", "xai")
         
         # reasoning_effortが空文字列の場合は削除してdrop_paramsを有効化
         if params.get('reasoning_effort') == '':
@@ -243,30 +243,67 @@ class LiteLLMWrapper:
                 raise ValueError("OpenRouterを使用するには有効なOPENROUTER_API_KEYが必要です。")
             params.setdefault('api_key', self.config.api_key)
         return params
+
+    @contextmanager
+    def temporary_tooling(self, enable: bool = True):
+        """
+        xAIモデルでツール利用を一時的に許可するコンテキスト
+        """
+        token = self._tools_allowed_ctx.set(enable)
+        try:
+            yield
+        finally:
+            self._tools_allowed_ctx.reset(token)
     
     def generate(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """
         LLMレスポンス生成（エラー時は例外を再発生）
-        
+
         Args:
             messages: メッセージリスト
             **kwargs: 追加パラメータ
-            
+
         Returns:
             str: 生成されたレスポンス
         """
         try:
             # パラメータを準備（空のreasoning_effortをチェック・処理）
             params = self._prepare_completion_params(**kwargs)
-            
-            # LiteLLM completion呼び出し
+
+            # xAI Responses API直接呼び出し（x_search/web_searchツール使用時）
+            if self._should_use_xai_responses_api(params):
+                return self._call_xai_responses_api(messages, params)
+
+            # LiteLLM completion呼び出し（従来の処理）
+            # x_searchツールがない場合はtools関連パラメータを除去
+            params.pop("tools", None)
+            params.pop("tool_choice", None)
+            params.pop("custom_llm_provider", None)
+
             response = self.litellm.completion(
                 model=self.config.model_name_or_path,
                 messages=messages,
                 max_tokens=self.config.max_tokens,
                 **params
             )
-            
+
+            # xAI のツール実行有無をログに記録（tool_calls を安全に参照）
+            if self.config.provider == "xai":
+                tool_calls = getattr(response.choices[0].message, "tool_calls", None) or []
+                if tool_calls:
+                    called = []
+                    for tc in tool_calls:
+                        if isinstance(tc, dict):
+                            called.append(tc.get("type") or tc.get("function", {}).get("name") or tc.get("id") or "unknown")
+                        else:
+                            called.append(
+                                getattr(tc, "type", None)
+                                or getattr(getattr(tc, "function", None), "name", None)
+                                or getattr(tc, "id", None)
+                                or str(tc)
+                            )
+                    self.logger.info(f"xAIツール呼び出し検知: {', '.join(called)}")
+
             response_content = response.choices[0].message.content
             
             # contentがNoneまたは空の場合のエラーハンドリング
@@ -296,19 +333,31 @@ class LiteLLMWrapper:
     def generate_stream(self, messages: List[Dict[str, str]], **kwargs) -> Generator[str, None, None]:
         """
         ストリーミングレスポンス生成（エラー時は例外を再発生）
-        
+
         Args:
             messages: メッセージリスト
             **kwargs: 追加パラメータ
-            
+
         Yields:
             str: ストリーミングチャンク
         """
         try:
             # パラメータを準備（空のreasoning_effortをチェック・処理）
             params = self._prepare_completion_params(**kwargs)
-            
-            # LiteLLM completion（ストリーミング）呼び出し
+
+            # xAI Responses API直接呼び出し（x_search/web_searchツール使用時）
+            # Responses APIはストリーミング未対応のため、全体を一度にyield
+            if self._should_use_xai_responses_api(params):
+                result = self._call_xai_responses_api(messages, params)
+                yield result
+                return
+
+            # LiteLLM completion（ストリーミング）呼び出し（従来の処理）
+            # x_searchツールがない場合はtools関連パラメータを除去
+            params.pop("tools", None)
+            params.pop("tool_choice", None)
+            params.pop("custom_llm_provider", None)
+
             response = self.litellm.completion(
                 model=self.config.model_name_or_path,
                 messages=messages,
@@ -437,3 +486,89 @@ class LiteLLMWrapper:
             self._log_detailed_error(e, "embed", [{"role": "user", "content": str(texts)}], {})
             # エラーを再発生（フォールバックしない）
             raise
+
+    def _should_use_xai_responses_api(self, params: Dict[str, Any]) -> bool:
+        """
+        xAI Responses APIを直接呼び出すべきか判定
+
+        xAIプロバイダーかつx_search/web_searchツールが設定されている場合True
+        """
+        if self.config.provider != "xai":
+            return False
+
+        tools = params.get("tools") or []
+        xai_tool_types = {"x_search", "web_search"}
+        return any(
+            isinstance(t, dict) and t.get("type") in xai_tool_types
+            for t in tools
+        )
+
+    def _call_xai_responses_api(
+        self, messages: List[Dict[str, str]], params: Dict[str, Any]
+    ) -> str:
+        """
+        xAI Responses APIを直接呼び出す
+
+        LiteLLMはxAI Responses APIをサポートしていないため、
+        x_search/web_searchツール使用時は直接APIを呼び出す
+
+        Args:
+            messages: メッセージリスト（Chat Completions形式）
+            params: パラメータ（tools等を含む）
+
+        Returns:
+            str: 生成されたレスポンス
+        """
+        url = "https://api.x.ai/v1/responses"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.config.api_key}",
+        }
+
+        # モデル名からxai/プレフィックスを除去（Responses APIでは不要）
+        model_name = self.config.model_name_or_path
+        if model_name.startswith("xai/"):
+            model_name = model_name[4:]
+
+        # リクエストボディ構築
+        payload: Dict[str, Any] = {
+            "model": model_name,
+            "input": messages,  # Chat Completionsのmessagesをそのまま使用
+            "max_output_tokens": self.config.max_tokens,
+        }
+
+        # ツール設定を追加
+        tools = params.get("tools")
+        if tools:
+            payload["tools"] = tools
+
+        logger.info(f"xAI Responses API呼び出し: model={model_name}, tools={[t.get('type') for t in (tools or [])]}")
+
+        # API呼び出し
+        response = requests.post(url, headers=headers, json=payload, timeout=120)
+
+        if response.status_code != 200:
+            error_msg = f"xAI Responses API error: {response.status_code} - {response.text}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
+        result = response.json()
+
+        # レスポンスからテキストを抽出
+        # Responses API形式: {"output": [{"content": [{"text": "..."}]}]}
+        output = result.get("output", [])
+        if not output:
+            raise ValueError("xAI Responses APIからの出力が空です")
+
+        # outputの最後のメッセージからテキストを抽出
+        for item in reversed(output):
+            if item.get("type") == "message":
+                content_list = item.get("content", [])
+                for content in content_list:
+                    if content.get("type") == "output_text":
+                        text = content.get("text", "")
+                        if text:
+                            logger.debug(f"xAI Responses API成功: {len(text)}文字")
+                            return text
+
+        raise ValueError("xAI Responses APIレスポンスからテキストを抽出できませんでした")

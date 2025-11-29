@@ -5,6 +5,7 @@ WebSocket最適化されたリアルタイムチャット機能
 """
 
 import asyncio
+from contextlib import nullcontext
 import json
 import logging
 import re
@@ -186,49 +187,59 @@ class WebSocketChatManager:
 
         logger.info(f"MOSProduct処理開始: session_id={session_id}, cube_id={cube_id}")
 
-        for sse_chunk in app.cocoro_product.mos_product.chat_with_references(
-            query=enhanced_query,
-            user_id=current_user_id,
-            cube_id=cube_id,
-            internet_search=True # 起動時はTrue
-        ):
-            chunk_count += 1
+        chat_llm = getattr(app.cocoro_product.mos_product, "chat_llm", None)
+        is_xai_provider = bool(getattr(getattr(chat_llm, "config", None), "provider", "") == "xai")
+        tool_ctx = (
+            chat_llm.temporary_tooling()
+            if is_xai_provider and hasattr(chat_llm, "temporary_tooling")
+            else nullcontext()
+        )
 
-            # キャラクターの回答を収集（会話履歴更新のため）
-            if '"type": "text"' in sse_chunk:
+        # xAI利用時はツールを一時的に許可した状態でストリーミング実行
+        with tool_ctx:
+            for sse_chunk in app.cocoro_product.mos_product.chat_with_references(
+                query=enhanced_query,
+                user_id=current_user_id,
+                cube_id=cube_id,
+                internet_search=True # 起動時はTrue
+            ):
+                chunk_count += 1
+
+                # キャラクターの回答を収集（会話履歴更新のため）
+                if '"type": "text"' in sse_chunk:
+                    try:
+                        import json
+                        json_data = json.loads(sse_chunk[6:].strip())  # "data: " プレフィックス除去
+                        if json_data.get("type") == "text":
+                            full_response += json_data.get("data", "")
+                    except:
+                        pass  # JSON解析エラーは無視
+
+                # デバッグ出力
+                self._log_chunk_debug(sse_chunk, chunk_count)
+
+                # キューに結果を追加（完全非同期）
                 try:
-                    import json
-                    json_data = json.loads(sse_chunk[6:].strip())  # "data: " プレフィックス除去
-                    if json_data.get("type") == "text":
-                        full_response += json_data.get("data", "")
-                except:
-                    pass  # JSON解析エラーは無視
-
-            # デバッグ出力
-            self._log_chunk_debug(sse_chunk, chunk_count)
-
-            # キューに結果を追加（完全非同期）
-            try:
-                asyncio.run_coroutine_threadsafe(
-                    session_queue.put(sse_chunk),
-                    main_loop
-                )
-            except Exception as queue_error:
-                logger.error(f"キュー送信エラー: {queue_error}")
-                break
-
-            # ストリーミング終了シグナル検出
-            if '"type": "end"' in sse_chunk:
-                logger.info(f"MOSProduct ストリーミング完了: session_id={session_id}, チャンク数={chunk_count} - 記憶保存処理継続中")
-
-                # 会話履歴を即座に更新（一度だけ）
-                if not history_updated and full_response.strip():
-                    self._update_chat_history_immediately(
-                        app, enhanced_query, full_response, current_user_id, session_id, main_loop, request_data
+                    asyncio.run_coroutine_threadsafe(
+                        session_queue.put(sse_chunk),
+                        main_loop
                     )
-                    history_updated = True
+                except Exception as queue_error:
+                    logger.error(f"キュー送信エラー: {queue_error}")
+                    break
 
-                # MemOSの内部処理（記憶保存等）を完了させるためループは継続
+                # ストリーミング終了シグナル検出
+                if '"type": "end"' in sse_chunk:
+                    logger.info(f"MOSProduct ストリーミング完了: session_id={session_id}, チャンク数={chunk_count} - 記憶保存処理継続中")
+
+                    # 会話履歴を即座に更新（一度だけ）
+                    if not history_updated and full_response.strip():
+                        self._update_chat_history_immediately(
+                            app, enhanced_query, full_response, current_user_id, session_id, main_loop, request_data
+                        )
+                        history_updated = True
+
+                    # MemOSの内部処理（記憶保存等）を完了させるためループは継続
 
         return full_response, current_user_id, history_updated
     

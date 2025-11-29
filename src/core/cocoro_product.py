@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+from contextlib import nullcontext
 from typing import AsyncIterator, Dict, List, Optional
 from pathlib import Path
 
@@ -567,19 +568,29 @@ class CocoroProductWrapper:
         """
         if user_id is None:
             user_id = self.current_user_id
-        
+
         try:
+            # xAI プロバイダー利用時のみ一時的にツール利用を許可する
+            chat_llm = getattr(self.mos_product, "chat_llm", None)
+            is_xai_provider = bool(getattr(getattr(chat_llm, "config", None), "provider", "") == "xai")
+            tool_ctx = (
+                chat_llm.temporary_tooling()
+                if is_xai_provider and hasattr(chat_llm, "temporary_tooling")
+                else nullcontext()
+            )
+
             # CocoroMOSProduct.chat_with_referencesによる非同期記憶保存処理
             # 記憶保存はバックグラウンドで実行され、レスポンス遅延なし
             # 注意: historyパラメータは無視し、MemOSの自動履歴管理(user_chat_histories)を使用
-            for chunk in self.mos_product.chat_with_references(
-                query=query,
-                user_id=user_id,
-                cube_id=cube_id,
-                internet_search=internet_search and self.cocoro_config.enable_internet_retrieval
-            ):
-                yield chunk
-                
+            with tool_ctx:
+                for chunk in self.mos_product.chat_with_references(
+                    query=query,
+                    user_id=user_id,
+                    cube_id=cube_id,
+                    internet_search=internet_search and self.cocoro_config.enable_internet_retrieval
+                ):
+                    yield chunk
+
         except Exception as e:
             logger.error(f"チャット処理エラー: {e}")
             raise
