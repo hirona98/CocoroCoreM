@@ -51,12 +51,11 @@ class LiteLLMEmbedder(BaseEmbedder):
         model_name = config["model_name_or_path"]
         base_url = config.get("base_url")
         
-        is_openrouter = model_name.startswith("openrouter/")
-        if is_openrouter:
-            model_name = model_name.replace("openrouter/", "", 1)
+        if model_name.startswith("openrouter/"):
+            model_name = model_name.replace("openrouter/", "")
             if not base_url:
                 base_url = "https://openrouter.ai/api/v1"
-        
+                
         # LiteLLMConfig作成
         litellm_config = LiteLLMConfig(
             model_name=model_name,

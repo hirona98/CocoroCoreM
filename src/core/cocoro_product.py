@@ -570,10 +570,13 @@ class CocoroProductWrapper:
             user_id = self.current_user_id
 
         try:
-            # xAIツール利用モデルの場合のみ一時的にツール利用を許可する
+            # xAI プロバイダー利用時のみ一時的にツール利用を許可する
             chat_llm = getattr(self.mos_product, "chat_llm", None)
             llm_config = getattr(chat_llm, "config", None)
-            use_xai_tools = bool(getattr(llm_config, "use_xai_tools", False))
+            use_xai_tools = bool(
+                getattr(llm_config, "provider", "") == "xai"
+                and getattr(llm_config, "use_xai_tools", False)
+            )
             tool_ctx = (
                 chat_llm.temporary_tooling()
                 if use_xai_tools and hasattr(chat_llm, "temporary_tooling")
