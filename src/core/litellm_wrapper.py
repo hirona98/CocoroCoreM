@@ -34,6 +34,12 @@ class LiteLLMConfig:
         
         # プロバイダー名を自動抽出（例: "xai/grok-2-latest" → "xai"）
         self.provider = model_name.split('/')[0].lower() if '/' in model_name else 'openai'
+        # xai-x/ プレフィックスはxAIツール利用モデルとして扱う
+        self.use_xai_tools = False
+        if self.provider == "xai-x":
+            self.provider = "xai"
+            self.use_xai_tools = True
+            logger.info("xai-xモデルを検出: xAIツール利用経路を有効化")
         
         # プロバイダー固有の必須設定
         self._apply_provider_defaults()
@@ -111,6 +117,7 @@ class LiteLLMWrapper:
         self.config = config
         self.logger = logger
         self._tools_allowed_ctx: ContextVar[bool] = ContextVar("litellm_tools_allowed", default=False)
+        self._use_xai_tools = bool(getattr(self.config, "use_xai_tools", False))
         
         # 環境変数設定（プロバイダー別）
         self._setup_environment_variables()
@@ -208,7 +215,7 @@ class LiteLLMWrapper:
         params = {**self.config.extra_config, **kwargs}
 
         # xAI利用時に明示的に許可された場合のみx_searchツールを付与（ContextVarで並行安全）
-        if self.config.provider == "xai" and self._tools_allowed_ctx.get():
+        if self.config.provider == "xai" and self._use_xai_tools and self._tools_allowed_ctx.get():
             params.setdefault("tools", [{"type": "x_search"}])
             params.setdefault("tool_choice", "auto")
             params.setdefault("custom_llm_provider", "xai")
@@ -493,7 +500,7 @@ class LiteLLMWrapper:
 
         xAIプロバイダーかつx_search/web_searchツールが設定されている場合True
         """
-        if self.config.provider != "xai":
+        if self.config.provider != "xai" or not self._use_xai_tools:
             return False
 
         tools = params.get("tools") or []
@@ -529,6 +536,8 @@ class LiteLLMWrapper:
         model_name = self.config.model_name_or_path
         if model_name.startswith("xai/"):
             model_name = model_name[4:]
+        elif model_name.startswith("xai-x/"):
+            model_name = model_name[6:]
 
         # リクエストボディ構築
         payload: Dict[str, Any] = {
