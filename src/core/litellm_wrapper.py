@@ -22,10 +22,32 @@ class LiteLLMConfig:
     
     def __init__(self, model_name: str, api_key: str, base_url: str | None = None,
                  extra_config: Dict[str, Any] = None, **kwargs):
-        self.model_name_or_path = model_name
+        normalized_model = model_name
+        effective_base_url = base_url
+        is_openrouter_model = False
+        self.use_xai_tools = False
+
+        # OpenRouterプレフィックスを除去し、base_urlを補完
+        if normalized_model.startswith("openrouter/"):
+            normalized_model = normalized_model[len("openrouter/"):]
+            if not effective_base_url:
+                effective_base_url = "https://openrouter.ai/api/v1"
+            logger.info(f"OpenRouterモデル検出: {normalized_model} (base_urlを自動設定)")
+            is_openrouter_model = True
+
+        # xai-x/ プレフィックスはxAIツール利用モデルとして扱う
+        if normalized_model.startswith("xai-x/"):
+            self.use_xai_tools = True
+            # OpenRouter経由の場合はbase_urlを保持、それ以外はxAI直通にする
+            if not is_openrouter_model:
+                if effective_base_url:
+                    logger.info("xai-xモデルのためbase_urlをクリアしてxAI直通に切り替え")
+                effective_base_url = None
+
+        self.model_name_or_path = normalized_model
         self.api_key = api_key
         # OpenAI互換エンドポイント用の明示的なbase_url
-        self.base_url = base_url
+        self.base_url = effective_base_url
         
         self.max_tokens = kwargs.get('max_tokens', 8192)
         
@@ -33,13 +55,13 @@ class LiteLLMConfig:
         self.extra_config = extra_config or {}
         
         # プロバイダー名を自動抽出（例: "xai/grok-2-latest" → "xai"）
-        self.provider = model_name.split('/')[0].lower() if '/' in model_name else 'openai'
-        # xai-x/ プレフィックスはxAIツール利用モデルとして扱う
-        self.use_xai_tools = False
-        if self.provider == "xai-x":
+        model_prefix = self.model_name_or_path.split('/')[0].lower() if '/' in self.model_name_or_path else self.model_name_or_path.lower()
+        if is_openrouter_model:
+            self.provider = "openrouter"
+        elif self.use_xai_tools and model_prefix.startswith("xai"):
             self.provider = "xai"
-            self.use_xai_tools = True
-            logger.info("xai-xモデルを検出: xAIツール利用経路を有効化")
+        else:
+            self.provider = model_prefix if '/' in self.model_name_or_path else 'openai'
         
         # プロバイダー固有の必須設定
         self._apply_provider_defaults()
