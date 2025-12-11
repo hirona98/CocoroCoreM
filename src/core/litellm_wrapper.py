@@ -55,6 +55,8 @@ class LiteLLMConfig:
                 self.base_url = openrouter_base_url
             effective_url = self.base_url or openrouter_base_url
             self.extra_config.setdefault('base_url', effective_url)
+            # OpenRouterは一部パラメータに未対応なためデフォルトでdrop_paramsを有効化
+            self.extra_config.setdefault('drop_params', True)
             logger.info(f"OpenRouter設定適用: base_url={effective_url}")
         
     def _configure_reasoning_control(self):
@@ -228,6 +230,12 @@ class LiteLLMWrapper:
             params.pop('reasoning_effort', None)
             params['drop_params'] = True
             logger.debug("空のreasoning_effortを検出 → パラメータ削除とdrop_params有効化")
+
+        # OpenRouterはreasoning_effortを受け付けないため削除し、確実にdrop_paramsを有効化
+        if self.config.provider == "openrouter" and 'reasoning_effort' in params:
+            params.pop('reasoning_effort', None)
+            params['drop_params'] = True
+            logger.debug("OpenRouter: reasoning_effortを除去しdrop_params有効化")
         
         # OpenAI互換系の安定動作用に、per-call でも base_url / api_base を注入（環境変数依存回避）
         resolved_base_url = getattr(self.config, 'base_url', None) or self.config.extra_config.get('base_url')
