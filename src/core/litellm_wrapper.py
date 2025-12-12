@@ -447,7 +447,7 @@ class LiteLLMWrapper:
             logger.error(f"💳 クォータ・制限エラー - 使用制限を確認してください: {error_info}")
         else:
             logger.error(f"❓ 予期しないエラー: {error_info}", exc_info=True)
-    
+
     def embed(self, texts: List[str]) -> List[List[float]]:
         """
         テキストの埋め込みベクトル生成（エラー時は例外を再発生）
@@ -472,6 +472,13 @@ class LiteLLMWrapper:
             if self.config.provider == "lm_studio":
                 effective_key = self.config.api_key if self.config.api_key else None
                 params.setdefault('api_key', effective_key or 'lm-studio')
+
+            # OpenRouter: モデル名の openrouter/ プレフィックス前提で運用する
+            if self.config.provider == "openrouter":
+                if not self.config.api_key or self.config.api_key == "dummy-api-key":
+                    raise ValueError("OpenRouterを使用するには有効なOPENROUTER_API_KEYが必要です。")
+                # LiteLLMはembeddingでopenrouter providerが未対応扱いになることがあるため、直接OpenAI互換APIを呼ぶ
+                return self._call_openrouter_embeddings_api(texts, resolved_base_url)
 
             # LiteLLM embedding呼び出し
             response = self.litellm.embedding(
@@ -506,6 +513,46 @@ class LiteLLMWrapper:
             self._log_detailed_error(e, "embed", [{"role": "user", "content": str(texts)}], {})
             # エラーを再発生（フォールバックしない）
             raise
+
+    def _call_openrouter_embeddings_api(self, texts: List[str], base_url: str | None) -> List[List[float]]:
+        """
+        OpenRouter embeddings API（OpenAI互換）を直接呼び出す
+
+        Note: LiteLLMのembeddingがopenrouter provider未対応扱いになるケースの回避策。
+        """
+        effective_base = (base_url or "https://openrouter.ai/api/v1").rstrip("/")
+        url = f"{effective_base}/embeddings"
+        model_name = self.config.model_name_or_path
+        if model_name.startswith("openrouter/"):
+            model_name = model_name[len("openrouter/"):]
+
+        headers = {
+            "Authorization": f"Bearer {self.config.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model_name,
+            "input": texts,
+        }
+
+        resp = requests.post(url, headers=headers, json=payload, timeout=120)
+        if resp.status_code != 200:
+            raise RuntimeError(f"OpenRouter embeddings error: {resp.status_code} - {resp.text}")
+
+        data = resp.json()
+        items = data.get("data") or []
+        embeddings: List[List[float]] = []
+        for item in items:
+            if isinstance(item, dict) and "embedding" in item:
+                embeddings.append(item["embedding"])
+            elif hasattr(item, "embedding"):
+                embeddings.append(item.embedding)  # type: ignore[attr-defined]
+            else:
+                raise ValueError(f"OpenRouter embeddings レスポンス形式が不正です: {type(item)}")
+
+        if not embeddings:
+            raise ValueError("OpenRouter embeddings の結果が空です")
+        return embeddings
 
     def _should_use_xai_responses_api(self, params: Dict[str, Any]) -> bool:
         """
