@@ -1,6 +1,6 @@
 # CocoroCoreM
 
-CocoroAI 統合バックエンドシステム
+CocoroAI Ver4系 統合バックエンドシステム
 
 ## 使用フレームワーク
 
